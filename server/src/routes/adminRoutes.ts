@@ -1351,6 +1351,8 @@ router.get('/backup', async (_req: AuthenticatedRequest, res: Response): Promise
   } catch (error) {
     res.status(500).json({ error: 'Failed to create backup' });
   }
+});
+
 // ==========================================
 // 10. LEAVE MANAGEMENT (REVIEW / APPROVE / REJECT)
 // ==========================================

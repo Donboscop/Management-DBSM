@@ -12,6 +12,15 @@ export function hashOtp(otp: string, email: string): string {
     .digest('hex');
 }
 
+export function verifyOtpHash(otp: string, email: string, hash: string): boolean {
+  const calculated = hashOtp(otp, email);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash));
+  } catch {
+    return false;
+  }
+}
+
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
