@@ -1,0 +1,2016 @@
+import React, { useState, useEffect } from 'react';
+import {
+  LogOut,
+  Users,
+  Languages as LanguagesIcon,
+  Home,
+  Utensils,
+  Calendar,
+  ShieldAlert,
+  Bell,
+  Download,
+  Plus,
+  Search,
+  RefreshCw,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  LayoutDashboard,
+  Layers,
+  Trash2,
+  ChevronRight,
+  Sun,
+  Brush,
+  BookOpen,
+  Sparkles,
+  Briefcase,
+  Clock,
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+
+export const AdminPortal: React.FC = () => {
+  const { logout } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<
+    'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'notices' | 'logs'
+  >('dashboard');
+
+  // Dashboard Data
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  // Students Data
+  const [students, setStudents] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterGender, setFilterGender] = useState('');
+  const [filterResidency, setFilterResidency] = useState('');
+  // Languages Data
+  const [languages, setLanguages] = useState<any[]>([]);
+  // Dormitory Data
+  const [dormRooms, setDormRooms] = useState<any[]>([]);
+  // Refectory Data
+  const [refectoryTables, setRefectoryTables] = useState<any[]>([]);
+  // Daily Duties
+  const [duties, setDuties] = useState<any[]>([]);
+  // Special Responsibilities
+  const [responsibilities, setResponsibilities] = useState<any[]>([]);
+  // Notices
+  const [notices, setNotices] = useState<any[]>([]);
+  // Logs
+  const [logs, setLogs] = useState<any[]>([]);
+
+  // Modals & Forms
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showAddLanguageModal, setShowAddLanguageModal] = useState(false);
+  const [showAddRoomModal, setShowAddRoomModal] = useState(false);
+  const [showAddTableModal, setShowAddTableModal] = useState(false);
+  const [showAddNoticeModal, setShowAddNoticeModal] = useState(false);
+  const [showAddRespModal, setShowAddRespModal] = useState(false);
+
+  const [newRoom, setNewRoom] = useState({ name: '', capacity: 6, gender: 'Male' });
+  const [newTable, setNewTable] = useState({ name: '', capacity: 8, genderRule: 'ANY' });
+
+  // Custom Confirmation Popup State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    isDestructive?: boolean;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Delete',
+    isDestructive: true,
+    onConfirm: () => {},
+  });
+
+  const requestConfirm = (options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    isDestructive?: boolean;
+    onConfirm: () => Promise<void> | void;
+  }) => {
+    setConfirmModal({
+      isOpen: true,
+      title: options.title,
+      message: options.message,
+      confirmLabel: options.confirmLabel || 'Delete',
+      isDestructive: options.isDestructive !== undefined ? options.isDestructive : true,
+      onConfirm: options.onConfirm,
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  // Status feedback
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Language Color Palette for Dynamic Demographics Bar
+  const LANGUAGE_COLORS = [
+    { bg: 'bg-[#917B77]', text: 'text-[#917B77]', border: 'border-[#917B77]/40' },
+    { bg: 'bg-amber-400', text: 'text-amber-400', border: 'border-amber-400/40' },
+    { bg: 'bg-emerald-400', text: 'text-emerald-400', border: 'border-emerald-400/40' },
+    { bg: 'bg-cyan-400', text: 'text-cyan-400', border: 'border-cyan-400/40' },
+    { bg: 'bg-purple-400', text: 'text-purple-400', border: 'border-purple-400/40' },
+    { bg: 'bg-rose-400', text: 'text-rose-400', border: 'border-rose-400/40' },
+    { bg: 'bg-indigo-400', text: 'text-indigo-400', border: 'border-indigo-400/40' },
+    { bg: 'bg-orange-400', text: 'text-orange-400', border: 'border-orange-400/40' },
+  ];
+
+  // Form states (No default language pre-set)
+  const [newStudent, setNewStudent] = useState({
+    name: '',
+    email: '',
+    gender: 'Male',
+    religion: 'Christian',
+    dayScholar: false,
+    batch: 'Batch 2026',
+    languageName: '',
+  });
+  const [isCustomLangInput, setIsCustomLangInput] = useState(false);
+  const [newLangName, setNewLangName] = useState('');
+  const [newNotice, setNewNotice] = useState({ title: '', content: '', targetAudience: 'ALL', priority: 'NORMAL' });
+  const [newResp, setNewResp] = useState({ title: '', requiredCount: 2, genderRule: 'ANY' });
+  const [importJsonText, setImportJsonText] = useState('');
+
+  useEffect(() => {
+    loadTabContent();
+  }, [activeTab]);
+
+  const showToast = (msg: string, isError = false) => {
+    if (isError) {
+      setActionError(msg);
+      setTimeout(() => setActionError(null), 5000);
+    } else {
+      setActionSuccess(msg);
+      setTimeout(() => setActionSuccess(null), 4000);
+    }
+  };
+
+  const loadTabContent = async () => {
+    try {
+      if (activeTab === 'dashboard') {
+        const res = await api.getDashboard();
+        setDashboardData(res);
+      } else if (activeTab === 'students') {
+        const [stus, langs] = await Promise.all([
+          api.getStudents({ search: searchQuery, gender: filterGender, residency: filterResidency }),
+          api.getLanguages(),
+        ]);
+        setStudents(stus.students);
+        setLanguages(langs.languages);
+      } else if (activeTab === 'languages') {
+        const res = await api.getLanguages();
+        setLanguages(res.languages);
+      } else if (activeTab === 'dormitory') {
+        const res = await api.getDormitory();
+        setDormRooms(res.rooms);
+      } else if (activeTab === 'refectory') {
+        const res = await api.getRefectory();
+        setRefectoryTables(res.tables);
+      } else if (activeTab === 'duties') {
+        const res = await api.getDuties();
+        setDuties(res.assignments);
+      } else if (activeTab === 'responsibilities') {
+        const res = await api.getSpecialResponsibilities();
+        setResponsibilities(res.list);
+      } else if (activeTab === 'notices') {
+        const res = await api.getNotices();
+        setNotices(res.notices);
+      } else if (activeTab === 'logs') {
+        const res = await api.getActivityLogs();
+        setLogs(res.logs);
+      }
+    } catch (err: any) {
+      showToast(err.message, true);
+    }
+  };
+
+  const openAddStudentModal = async () => {
+    try {
+      const res = await api.getLanguages();
+      setLanguages(res.languages);
+    } catch {}
+    setNewStudent({
+      name: '',
+      email: '',
+      gender: 'Male',
+      religion: 'Christian',
+      dayScholar: false,
+      batch: 'Batch 2026',
+      languageName: '',
+    });
+    setIsCustomLangInput(false);
+    setShowAddStudentModal(true);
+  };
+
+  // 1. Create Student
+  const handleCreateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanLang = newStudent.languageName.trim();
+    if (!cleanLang) {
+      showToast('Please select or type a language for the student', true);
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await api.createStudent({ ...newStudent, languageName: cleanLang });
+      setShowAddStudentModal(false);
+      setNewStudent({
+        name: '',
+        email: '',
+        gender: 'Male',
+        religion: 'Christian',
+        dayScholar: false,
+        batch: 'Batch 2026',
+        languageName: '',
+      });
+      setIsCustomLangInput(false);
+      showToast('Student authorized. Language demographics updated.');
+      const [dashRes, stuRes, langRes] = await Promise.all([
+        api.getDashboard(),
+        api.getStudents({ search: searchQuery, gender: filterGender, residency: filterResidency }),
+        api.getLanguages(),
+      ]);
+      setDashboardData(dashRes);
+      setStudents(stuRes.students);
+      setLanguages(langRes.languages);
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 2. Import Students
+  const handleImportStudents = async () => {
+    try {
+      const parsed = JSON.parse(importJsonText);
+      const studentList = Array.isArray(parsed) ? parsed : [parsed];
+      setIsProcessing(true);
+      const res = await api.importStudents(studentList);
+      setShowImportModal(false);
+      setImportJsonText('');
+      showToast(`Imported ${res.importedCount} students (${res.skippedCount} skipped)`);
+      loadTabContent();
+    } catch (err: any) {
+      showToast('Invalid JSON format. Please paste valid array of student objects.', true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 3. Add Language
+  const handleAddLanguage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLangName.trim()) return;
+    setIsProcessing(true);
+    try {
+      await api.createLanguage(newLangName);
+      setNewLangName('');
+      setShowAddLanguageModal(false);
+      showToast('Language added dynamically.');
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Delete Student (using Custom Popup)
+  const handleDeleteStudent = (id: string, name: string) => {
+    requestConfirm({
+      title: 'Delete Student Record',
+      message: `Are you sure you want to delete student "${name}"? This will permanently remove their student profile, authorized email authentication, and all dormitory room, refectory seating, and daily duty allocations.`,
+      confirmLabel: 'Delete Student',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setIsProcessing(true);
+        try {
+          await api.deleteStudent(id);
+          showToast(`Student "${name}" deleted.`);
+          loadTabContent();
+        } catch (err: any) {
+          showToast(err.message, true);
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
+  // Delete Language (using Custom Popup)
+  const handleDeleteLanguage = (id: string, name: string) => {
+    requestConfirm({
+      title: 'Delete Language',
+      message: `Are you sure you want to delete language "${name}" from the repository? Any students currently assigned to this language will be safely reassigned to "Not Specified".`,
+      confirmLabel: 'Delete Language',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setIsProcessing(true);
+        try {
+          await api.deleteLanguage(id);
+          showToast(`Language "${name}" deleted.`);
+          loadTabContent();
+        } catch (err: any) {
+          showToast(err.message, true);
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
+  // Create Room
+  const handleCreateRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoom.name.trim()) return;
+    setIsProcessing(true);
+    try {
+      await api.createDormRoom(newRoom);
+      setNewRoom({ name: '', capacity: 6, gender: 'Male' });
+      setShowAddRoomModal(false);
+      showToast('Dormitory hall/room added successfully.');
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Delete Room (using Custom Popup)
+  const handleDeleteRoom = (id: string, name: string) => {
+    requestConfirm({
+      title: 'Delete Dormitory Room',
+      message: `Are you sure you want to delete room "${name}"? All existing bed allocations for this room will be cleared immediately.`,
+      confirmLabel: 'Delete Room',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setIsProcessing(true);
+        try {
+          await api.deleteDormRoom(id);
+          showToast(`Room "${name}" deleted.`);
+          loadTabContent();
+        } catch (err: any) {
+          showToast(err.message, true);
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
+  // Create Table
+  const handleCreateTable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTable.name.trim()) return;
+    setIsProcessing(true);
+    try {
+      await api.createRefectoryTable(newTable);
+      setNewTable({ name: '', capacity: 8, genderRule: 'ANY' });
+      setShowAddTableModal(false);
+      showToast('Dining table added successfully.');
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Delete Table (using Custom Popup)
+  const handleDeleteTable = (id: string, name: string) => {
+    requestConfirm({
+      title: 'Delete Dining Table',
+      message: `Are you sure you want to delete dining table "${name}"? All student seating allocations assigned to this table will be cleared.`,
+      confirmLabel: 'Delete Table',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setIsProcessing(true);
+        try {
+          await api.deleteRefectoryTable(id);
+          showToast(`Dining table "${name}" deleted.`);
+          loadTabContent();
+        } catch (err: any) {
+          showToast(err.message, true);
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
+  // Delete Special Responsibility (using Custom Popup)
+  const handleDeleteResp = (id: string, title: string) => {
+    requestConfirm({
+      title: 'Delete Special Role',
+      message: `Are you sure you want to delete institutional responsibility "${title}"? This duty will no longer be assigned during rotational scheduling.`,
+      confirmLabel: 'Delete Role',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setIsProcessing(true);
+        try {
+          await api.deleteSpecialResponsibility(id);
+          showToast(`Responsibility "${title}" deleted.`);
+          loadTabContent();
+        } catch (err: any) {
+          showToast(err.message, true);
+        } finally {
+          setIsProcessing(false);
+        }
+      },
+    });
+  };
+
+  // 4. Generate Dormitory Schedule (Soft Language Balanced)
+  const handleGenerateDormitory = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await api.generateDormitory();
+      showToast(res.message);
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 5. Generate Refectory Schedule (Soft Language Balanced)
+  const handleGenerateRefectory = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await api.generateRefectory();
+      showToast(res.message);
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 6. Generate Daily Duties (Fair FIFO rotation, NO language balancing)
+  const handleGenerateDuties = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await api.generateDuties();
+      showToast(res.message);
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 7. Generate All Schedules (One Click Master Generation)
+  const handleGenerateAllSchedules = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await api.generateAllSchedules();
+      showToast(res.message);
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 8. Add Special Responsibility
+  const handleAddResp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newResp.title.trim()) return;
+    setIsProcessing(true);
+    try {
+      await api.createSpecialResponsibility(newResp);
+      setShowAddRespModal(false);
+      setNewResp({ title: '', requiredCount: 2, genderRule: 'ANY' });
+      showToast('Special responsibility registered.');
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 9. Add Notice
+  const handleAddNotice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotice.title.trim() || !newNotice.content.trim()) return;
+    setIsProcessing(true);
+    try {
+      await api.createNotice(newNotice);
+      setShowAddNoticeModal(false);
+      setNewNotice({ title: '', content: '', targetAudience: 'ALL', priority: 'NORMAL' });
+      showToast('Notice published.');
+      loadTabContent();
+    } catch (err: any) {
+      showToast(err.message, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 10. Download Backup
+  const handleDownloadBackup = async () => {
+    try {
+      const data = await api.getBackup();
+      const blob = new Blob([JSON.stringify(data.backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dbsm-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Full system backup downloaded.');
+    } catch (err: any) {
+      showToast(err.message, true);
+    }
+  };
+
+  return (
+    <div className="min-h-screen text-white flex flex-col relative select-none font-body">
+      {/* Real Full-Screen Cinematic DBSM Background Image */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <img
+          src="/background.jpg"
+          alt="DBSM Academy"
+          className="w-full h-full object-cover object-[center_35%]"
+        />
+        {/* Subtle dark gradient/vignette to ensure AAA readability while preserving sunset and building */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/60" />
+        <div className="absolute inset-0 bg-radial-vignette opacity-70" />
+      </div>
+
+      {/* Fixed Top Navigation */}
+      <nav className="fixed top-0 inset-x-0 z-40 px-6 sm:px-12 py-4 flex items-center justify-between backdrop-blur-md bg-black/25 border-b border-white/10">
+        {/* LEFT: Logo */}
+        <div
+          onClick={() => setActiveTab('dashboard')}
+          className="flex items-center gap-2 cursor-pointer group"
+        >
+          <span className="font-heading text-lg sm:text-xl font-medium tracking-tight text-white group-hover:text-amber-200 transition-colors">
+            DBSM Academy<sup className="text-xs">®</sup>
+          </span>
+          <span className="text-amber-300 text-base select-none">✳︎</span>
+        </div>
+
+        {/* CENTER: Navigation Links */}
+        <div className="hidden md:flex items-center gap-6 text-xs tracking-wider uppercase font-medium">
+          <button
+            onClick={() => setActiveTab('students')}
+            className={`transition-colors cursor-pointer ${
+              activeTab === 'students' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            Students
+          </button>
+          <button
+            onClick={() => setActiveTab('dormitory')}
+            className={`transition-colors cursor-pointer ${
+              activeTab === 'dormitory' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            Dormitory
+          </button>
+          <button
+            onClick={() => setActiveTab('refectory')}
+            className={`transition-colors cursor-pointer ${
+              activeTab === 'refectory' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            Refectory
+          </button>
+
+          {/* Duties Dropdown */}
+          <div className="relative group/navduties">
+            <button
+              className={`flex items-center gap-1 transition-colors cursor-pointer ${
+                ['duties', 'responsibilities'].includes(activeTab) ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              <span>Duties</span>
+              <span className="text-[9px]">▼</span>
+            </button>
+            <div className="absolute top-full left-0 mt-2 w-52 py-2 rounded-2xl glass-panel shadow-2xl border border-white/15 opacity-0 pointer-events-none group-hover/navduties:opacity-100 group-hover/navduties:pointer-events-auto transition-all duration-200 backdrop-blur-2xl">
+              <button
+                onClick={() => setActiveTab('duties')}
+                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Morning Job
+              </button>
+              <button
+                onClick={() => setActiveTab('duties')}
+                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                House Cleaning
+              </button>
+              <button
+                onClick={() => setActiveTab('responsibilities')}
+                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Special Responsibilities
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setActiveTab('duties')}
+            className="text-white/70 hover:text-white transition-colors cursor-pointer"
+          >
+            Ministry
+          </button>
+          <button
+            onClick={() => setActiveTab('notices')}
+            className={`transition-colors cursor-pointer ${
+              activeTab === 'notices' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            Posters
+          </button>
+        </div>
+
+        {/* RIGHT: System Icons & Profile */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDownloadBackup}
+            className="p-2 rounded-full bg-white/5 hover:bg-white/15 text-white/80 hover:text-white transition-all border border-white/10 cursor-pointer"
+            title="System Cloud Backup"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setActiveTab('notices')}
+            className="p-2 rounded-full bg-white/5 hover:bg-white/15 text-white/80 hover:text-white transition-all border border-white/10 cursor-pointer relative"
+            title="Institutional Notices"
+          >
+            <Bell className="w-4 h-4" />
+            {dashboardData?.stats?.noticesCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400"></span>
+            )}
+          </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={logout}
+            icon={<LogOut className="w-3.5 h-3.5" />}
+          >
+            Sign out
+          </Button>
+        </div>
+      </nav>
+
+      {/* Floating Notifications */}
+      {actionSuccess && (
+        <div className="fixed top-20 right-8 z-50 p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-xs text-emerald-200 backdrop-blur-xl flex items-center gap-3 animate-fadeIn shadow-2xl">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{actionSuccess}</span>
+        </div>
+      )}
+      {actionError && (
+        <div className="fixed top-20 right-8 z-50 p-4 rounded-2xl bg-red-500/20 border border-red-500/40 text-xs text-red-200 backdrop-blur-xl flex items-center gap-3 animate-fadeIn shadow-2xl">
+          <AlertCircle className="w-4 h-4 text-red-400" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* Main Administrative Container */}
+      <main className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 sm:px-12 pt-20 pb-12 flex flex-col">
+        {/* Navigation Breadcrumb Bar when on Sub-tabs */}
+        {activeTab !== 'dashboard' && (
+          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 border-b border-white/10 text-xs tracking-wider uppercase">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Dashboard</span>
+            </button>
+            <span className="text-white/30">/</span>
+            {[
+              { id: 'students', label: 'Students', icon: <Users className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'languages', label: 'Languages', icon: <LanguagesIcon className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'dormitory', label: 'Dormitory', icon: <Home className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'refectory', label: 'Refectory', icon: <Utensils className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'duties', label: 'Daily Duties', icon: <Calendar className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'responsibilities', label: 'Special Roles', icon: <Layers className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'notices', label: 'Notices & Posters', icon: <Bell className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'logs', label: 'Audit Logs', icon: <ShieldAlert className="w-3.5 h-3.5 mr-1" /> },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-white text-black font-semibold shadow-md'
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 1. MASTER DASHBOARD VIEW                                 */}
+        {/* ======================================================== */}
+        {activeTab === 'dashboard' && dashboardData && (
+          <div className="space-y-8 animate-fadeIn">
+            {/* HERO SECTION */}
+            <div className="pt-8 pb-4 max-w-4xl">
+              <span className="text-xs sm:text-sm tracking-wide text-white/70 font-light block mb-2">
+                Welcome to DBSM Academy. Don Bosco Skill Mission Schedule & Student Management
+              </span>
+              <h1
+                className="font-heading font-medium tracking-tight text-white mb-4 leading-none"
+                style={{ fontSize: 'clamp(48px, 7vw, 96px)' }}
+              >
+                DBSM Academy.
+              </h1>
+              <p className="text-sm sm:text-base text-white/75 font-light leading-relaxed max-w-2xl mb-8">
+                Manage students, organize duties, balance accommodation and seating, and prepare professional notice board schedules.
+              </p>
+
+              {/* Hero Action Pill Buttons */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setActiveTab('students')}
+                  className="px-5 py-2.5 rounded-full bg-[#917B77] hover:bg-[#806b67] text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all shadow-lg hover:shadow-xl cursor-pointer"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Manage Students</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('dormitory')}
+                  className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all border border-white/15 backdrop-blur-md cursor-pointer"
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Dormitory</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('refectory')}
+                  className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all border border-white/15 backdrop-blur-md cursor-pointer"
+                >
+                  <Utensils className="w-4 h-4" />
+                  <span>Refectory</span>
+                </button>
+
+                <div className="relative group/heroduties">
+                  <button
+                    className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-1.5 transition-all border border-white/15 backdrop-blur-md cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span>Duties</span>
+                    <span className="text-[9px]">▼</span>
+                  </button>
+                  <div className="absolute top-full left-0 mt-2 w-48 py-2 rounded-2xl glass-panel shadow-2xl border border-white/15 opacity-0 pointer-events-none group-hover/heroduties:opacity-100 group-hover/heroduties:pointer-events-auto transition-all duration-200 backdrop-blur-2xl z-20">
+                    <button
+                      onClick={() => setActiveTab('duties')}
+                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      Morning Job
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('duties')}
+                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      House Cleaning
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('responsibilities')}
+                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      Special Responsibilities
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveTab('notices')}
+                  className="px-5 py-2.5 rounded-full bg-white/90 hover:bg-white text-neutral-900 text-xs font-semibold tracking-wider uppercase flex items-center gap-2 transition-all shadow-lg cursor-pointer"
+                >
+                  <Bell className="w-4 h-4 text-neutral-900" />
+                  <span>Posters</span>
+                </button>
+              </div>
+            </div>
+
+            {/* DASHBOARD STATISTICS SECTION (6 CARDS - 100% CALCULATED) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {/* 1. TOTAL STUDENTS */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">TOTAL STUDENTS</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-white mt-2">
+                  {dashboardData.stats?.totalStudents || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">100% of academy</span>
+              </div>
+
+              {/* 2. HOSTELLERS */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">HOSTELLERS</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-amber-200 mt-2">
+                  {dashboardData.stats?.hostellers || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">
+                  {dashboardData.stats?.hostellerPct || 0}% of academy
+                </span>
+              </div>
+
+              {/* 3. DAY SCHOLARS */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">DAY SCHOLARS</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-white mt-2">
+                  {dashboardData.stats?.dayScholars || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">
+                  {dashboardData.stats?.dayScholarPct || 0}% of academy
+                </span>
+              </div>
+
+              {/* 4. LANGUAGES */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">LANGUAGES</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-emerald-300 mt-2">
+                  {dashboardData.stats?.languagesRepresented || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">Languages represented</span>
+              </div>
+
+              {/* 5. MALE */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">MALE</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-white mt-2">
+                  {dashboardData.stats?.maleStudents || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">
+                  {dashboardData.stats?.malePct || 0}% of academy
+                </span>
+              </div>
+
+              {/* 6. FEMALE */}
+              <div className="p-5 rounded-3xl glass-panel flex flex-col justify-between">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-white/50 font-medium">FEMALE</span>
+                <span className="font-heading text-3xl sm:text-4xl font-medium text-white mt-2">
+                  {dashboardData.stats?.femaleStudents || 0}
+                </span>
+                <span className="text-[10px] text-white/40 mt-1">
+                  {dashboardData.stats?.femalePct || 0}% of academy
+                </span>
+              </div>
+            </div>
+
+            {/* THREE-COLUMN BOTTOM SECTION: LANGUAGE DIVERSITY, QUICK MODULES, RECENT SCHEDULES */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Column 1: LANGUAGE DIVERSITY POOL */}
+              <div className="p-6 rounded-3xl glass-panel flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-heading text-base font-semibold tracking-wider uppercase text-white">
+                      LANGUAGE DIVERSITY POOL
+                    </h3>
+                    <button
+                      onClick={() => setActiveTab('languages')}
+                      className="text-xs text-white/50 hover:text-white transition-colors cursor-pointer"
+                    >
+                      View all
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-white/45 mb-4">
+                    Dynamic student linguistic distribution supporting Dormitory and Refectory balancing.
+                  </p>
+
+                  {/* Language List with real progress bars */}
+                  <div className="space-y-3">
+                    {dashboardData.languages?.filter((l: any) => l.count > 0).slice(0, 7).map((l: any, idx: number) => {
+                      const color = LANGUAGE_COLORS[idx % LANGUAGE_COLORS.length];
+                      const pct = l.percentage || (dashboardData.stats?.totalStudents ? (l.count / dashboardData.stats.totalStudents) * 100 : 0);
+                      return (
+                        <div key={l.id} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium text-white/90">{l.name}</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-white/60 font-mono text-[11px]">{l.count}</span>
+                              <span className="text-white/40 font-mono text-[11px] w-12 text-right">{pct.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div
+                              style={{ width: `${pct}%` }}
+                              className={`h-full ${color.bg} transition-all duration-700 rounded-full`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(!dashboardData.languages || dashboardData.languages.filter((l: any) => l.count > 0).length === 0) && (
+                      <div className="py-8 text-center text-xs text-white/40">
+                        No student language data available yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-white/50">
+                  <span>{dashboardData.stats?.languagesRepresented || 0} unique languages represented</span>
+                  <button
+                    onClick={() => setShowAddLanguageModal(true)}
+                    className="text-amber-300 hover:text-amber-200 underline cursor-pointer"
+                  >
+                    + Add Language
+                  </button>
+                </div>
+              </div>
+
+              {/* Column 2: QUICK MODULES */}
+              <div className="p-6 rounded-3xl glass-panel flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-heading text-base font-semibold tracking-wider uppercase text-white">
+                      QUICK MODULES
+                    </h3>
+                    <span className="text-[10px] text-white/40 font-mono">7 Core Modules</span>
+                  </div>
+
+                  {/* Grid of Module Cards */}
+                  <div className="space-y-2">
+                    {[
+                      { name: 'Morning Job', icon: <Sun className="w-4 h-4 text-amber-300" />, tab: 'duties' },
+                      { name: 'Assembly', icon: <Sparkles className="w-4 h-4 text-cyan-300" />, tab: 'duties' },
+                      { name: 'House Cleaning', icon: <Brush className="w-4 h-4 text-emerald-300" />, tab: 'duties' },
+                      { name: 'Dormitory Allocation', icon: <Home className="w-4 h-4 text-purple-300" />, tab: 'dormitory' },
+                      { name: 'Special Responsibilities', icon: <Briefcase className="w-4 h-4 text-rose-300" />, tab: 'responsibilities' },
+                      { name: 'Refectory Seating', icon: <Utensils className="w-4 h-4 text-orange-300" />, tab: 'refectory' },
+                      { name: 'Mass Reading', icon: <BookOpen className="w-4 h-4 text-blue-300" />, tab: 'duties' },
+                    ].map((m) => (
+                      <button
+                        key={m.name}
+                        onClick={() => setActiveTab(m.tab as any)}
+                        className="w-full px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/15 flex items-center justify-between text-xs text-white/90 transition-all cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="p-1 rounded-lg bg-white/5">{m.icon}</span>
+                          <span className="font-medium group-hover:text-white transition-colors">{m.name}</span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Primary Action Button: Generate All Schedules */}
+                <div className="pt-4 border-t border-white/10">
+                  <button
+                    onClick={handleGenerateAllSchedules}
+                    disabled={isProcessing}
+                    className="w-full py-3.5 px-4 rounded-full bg-[#917B77] hover:bg-[#806b67] text-white text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-2 transition-all shadow-xl hover:shadow-2xl cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                    <span>{isProcessing ? 'Generating Schedules...' : 'Generate All Schedules'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Column 3: RECENT SCHEDULES */}
+              <div className="p-6 rounded-3xl glass-panel flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-heading text-base font-semibold tracking-wider uppercase text-white">
+                      RECENT SCHEDULES
+                    </h3>
+                    <button
+                      onClick={() => setActiveTab('logs')}
+                      className="text-xs text-white/50 hover:text-white transition-colors cursor-pointer"
+                    >
+                      View all
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-white/45 mb-4">
+                    Recently generated rosters and institutional allocations.
+                  </p>
+
+                  {/* Schedule Items List */}
+                  <div className="space-y-3">
+                    {dashboardData.recentSchedules?.map((s: any) => (
+                      <div
+                        key={s.id}
+                        className="p-3.5 rounded-2xl bg-white/5 border border-white/5 flex items-start justify-between gap-2 text-xs hover:bg-white/10 transition-colors"
+                      >
+                        <div>
+                          <h4 className="font-medium text-white">{s.title}</h4>
+                          <p className="text-[11px] text-white/50 mt-0.5">{s.period}</p>
+                          <div className="flex items-center gap-1.5 mt-2 text-[10px] text-white/40">
+                            <Clock className="w-3 h-3" />
+                            <span>{new Date(s.createdAt).toLocaleDateString()} • {new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full bg-[#917B77]/25 text-[#d8c3bf] border border-[#917B77]/40 text-[10px] font-medium uppercase tracking-wider">
+                          {s.status}
+                        </span>
+                      </div>
+                    ))}
+                    {(!dashboardData.recentSchedules || dashboardData.recentSchedules.length === 0) && (
+                      <div className="py-12 text-center text-xs text-white/40">
+                        No schedules generated yet. Click &ldquo;Generate All Schedules&rdquo; to create your first roster.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-white/50">
+                  <span>Auto-synced with audit logs</span>
+                  <button
+                    onClick={handleDownloadBackup}
+                    className="text-white/60 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Backup Data</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 2. STUDENTS VIEW                                         */}
+        {/* ======================================================== */}
+        {activeTab === 'students' && (
+          <div className="space-y-5 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+              {/* Search input & Filters */}
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                  <Search className="absolute left-4 top-3.5 w-4 h-4 text-white/40 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, ID, or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && loadTabContent()}
+                    className="w-full pl-11 pr-4 py-2.5 rounded-full text-xs text-white glass-input outline-none"
+                  />
+                </div>
+
+                <select
+                  value={filterGender}
+                  onChange={(e) => {
+                    setFilterGender(e.target.value);
+                  }}
+                  className="px-4 py-2.5 rounded-full text-xs glass-input text-white/80 outline-none"
+                >
+                  <option value="" className="bg-neutral-900">All Genders</option>
+                  <option value="Male" className="bg-neutral-900">Male</option>
+                  <option value="Female" className="bg-neutral-900">Female</option>
+                </select>
+
+                <select
+                  value={filterResidency}
+                  onChange={(e) => {
+                    setFilterResidency(e.target.value);
+                  }}
+                  className="px-4 py-2.5 rounded-full text-xs glass-input text-white/80 outline-none"
+                >
+                  <option value="" className="bg-neutral-900">All Residency</option>
+                  <option value="Hosteller" className="bg-neutral-900">Hosteller</option>
+                  <option value="Day Scholar" className="bg-neutral-900">Day Scholar</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowImportModal(true)}
+                  icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+                >
+                  Import Excel / JSON
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={openAddStudentModal}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Add Student
+                </Button>
+              </div>
+            </div>
+
+            {/* Students Table */}
+            <div className="p-6 rounded-3xl glass-panel overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/40 uppercase tracking-wider">
+                    <th className="pb-3 pl-2">Student ID</th>
+                    <th className="pb-3">Name</th>
+                    <th className="pb-3">Email (OTP Auth)</th>
+                    <th className="pb-3">Gender</th>
+                    <th className="pb-3">Residency</th>
+                    <th className="pb-3">Language</th>
+                    <th className="pb-3">Status</th>
+                    <th className="pb-3 text-right pr-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {students.map((s) => (
+                    <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                      <td className="py-3 pl-2 font-mono text-amber-300 font-medium">{s.studentId}</td>
+                      <td className="py-3 font-medium text-white">{s.name}</td>
+                      <td className="py-3 text-white/70">{s.email}</td>
+                      <td className="py-3 text-white/60">{s.gender}</td>
+                      <td className="py-3 text-white/60">{s.dayScholar ? 'Day Scholar' : 'Hosteller'}</td>
+                      <td className="py-3">
+                        <span className="px-2 py-0.5 rounded-md bg-white/10 text-white/80">
+                          {s.language?.name || 'Not Specified'}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px]">
+                          Authorized
+                        </span>
+                      </td>
+                      <td className="py-3 text-right pr-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStudent(s.id, s.name)}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer inline-flex items-center justify-center"
+                          title="Delete Student"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {students.length === 0 && (
+                <div className="py-12 text-center text-white/40">No student records found.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 3. LANGUAGES VIEW                                        */}
+        {/* ======================================================== */}
+        {activeTab === 'languages' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Dynamic Language Repository</h2>
+                <p className="text-xs text-white/50">
+                  Manage institutional languages used in soft balancing algorithms.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowAddLanguageModal(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Add New Language
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {languages.map((l) => (
+                <div key={l.id} className="p-5 rounded-3xl glass-panel flex items-center justify-between">
+                  <div>
+                    <h4 className="font-heading text-lg text-white">{l.name}</h4>
+                    <span className="text-xs text-white/40">{l._count?.students || 0} Registered Students</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLanguage(l.id, l.name)}
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                      title="Delete Language"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 4. DORMITORY VIEW                                        */}
+        {/* ======================================================== */}
+        {activeTab === 'dormitory' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Residential Halls (Hostellers)</h2>
+                <p className="text-xs text-white/50">
+                  Allocations strictly respect gender segregation, room capacity, and soft language diversity.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGenerateDormitory}
+                  isLoading={isProcessing}
+                  icon={<RefreshCw className="w-3.5 h-3.5" />}
+                >
+                  Regenerate Allocations
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowAddRoomModal(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Add Hall / Room
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {dormRooms.map((room) => (
+                <div key={room.id} className="p-6 rounded-3xl glass-panel">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="font-heading text-lg text-white">{room.name}</h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 text-xs font-mono">
+                        {room.gender} • {room.allocations?.length || 0} / {room.capacity}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRoom(room.id, room.name)}
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                      title="Delete Room"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-2 mt-4">
+                    {room.allocations?.map((a: any) => (
+                      <div
+                        key={a.id}
+                        className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between text-xs"
+                      >
+                        <div>
+                          <span className="font-medium text-white">{a.student.name}</span>
+                          <span className="text-white/40 ml-2 font-mono text-[10px]">
+                            {a.student.studentId}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-amber-300 font-medium">
+                          {a.student.language?.name || 'Not Specified'}
+                        </span>
+                      </div>
+                    ))}
+                    {(!room.allocations || room.allocations.length === 0) && (
+                      <div className="py-6 text-center text-xs text-white/40">No students allocated.</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {dormRooms.length === 0 && (
+                <div className="col-span-2 py-12 text-center text-white/40 glass-panel rounded-3xl">
+                  No dormitory halls configured. Click &ldquo;Add Hall / Room&rdquo; to create one.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 5. REFECTORY VIEW                                        */}
+        {/* ======================================================== */}
+        {activeTab === 'refectory' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Refectory Dining Tables</h2>
+                <p className="text-xs text-white/50">
+                  Allocations with soft language balancing to encourage camaraderie across linguistic backgrounds.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGenerateRefectory}
+                  isLoading={isProcessing}
+                  icon={<RefreshCw className="w-3.5 h-3.5" />}
+                >
+                  Regenerate Tables
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowAddTableModal(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Add Dining Table
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {refectoryTables.map((table) => (
+                <div key={table.id} className="p-6 rounded-3xl glass-panel">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="font-heading text-lg text-white">{table.name}</h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 text-xs font-mono">
+                        Capacity: {table.capacity} • {table.genderRule || 'ANY'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTable(table.id, table.name)}
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                      title="Delete Table"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-4">
+                    {table.allocations?.map((a: any) => (
+                      <div
+                        key={a.id}
+                        className="p-3 rounded-xl bg-white/5 border border-white/5 text-xs flex flex-col justify-between"
+                      >
+                        <span className="text-[10px] text-white/40 font-mono">Seat #{a.seatNumber}</span>
+                        <span className="font-medium text-white truncate mt-0.5">{a.student.name}</span>
+                        <span className="text-[10px] text-amber-300 mt-1">
+                          {a.student.language?.name || 'Not Specified'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {refectoryTables.length === 0 && (
+                <div className="col-span-2 py-12 text-center text-white/40 glass-panel rounded-3xl">
+                  No dining tables configured. Click &ldquo;Add Dining Table&rdquo; to create one.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 6. DAILY DUTIES VIEW                                     */}
+        {/* ======================================================== */}
+        {activeTab === 'duties' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Daily Rotational Duties</h2>
+                <p className="text-xs text-white/50">
+                  Morning Job, House Cleaning, Liturgy & Assembly (Fair rotation, same-day conflict-free).
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleGenerateDuties}
+                isLoading={isProcessing}
+                icon={<RefreshCw className="w-3.5 h-3.5" />}
+              >
+                Generate Today's Duties
+              </Button>
+            </div>
+
+            <div className="p-6 rounded-3xl glass-panel overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/40 uppercase tracking-wider">
+                    <th className="pb-3 pl-2">Duty Module</th>
+                    <th className="pb-3">Task Assignment</th>
+                    <th className="pb-3">Assigned Student</th>
+                    <th className="pb-3">Student ID</th>
+                    <th className="pb-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {duties.map((d) => (
+                    <tr key={d.id} className="hover:bg-white/5 transition-colors">
+                      <td className="py-3 pl-2 font-mono text-amber-300 font-medium">
+                        {d.dutyType.replace('_', ' ')}
+                      </td>
+                      <td className="py-3 font-medium text-white">{d.title}</td>
+                      <td className="py-3 text-white/80">{d.student?.name}</td>
+                      <td className="py-3 text-white/50 font-mono">{d.student?.studentId}</td>
+                      <td className="py-3 text-white/40 font-mono">{d.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {duties.length === 0 && (
+                <div className="py-12 text-center text-white/40">No duties generated for today.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 7. SPECIAL RESPONSIBILITIES VIEW                         */}
+        {/* ======================================================== */}
+        {activeTab === 'responsibilities' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Configurable Special Responsibilities</h2>
+                <p className="text-xs text-white/50">
+                  Add or edit institution duties (Bell Ringers, Sacristans, Water System, etc.)
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowAddRespModal(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+              >
+                New Responsibility
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {responsibilities.map((r) => (
+                <div key={r.id} className="p-6 rounded-3xl glass-panel">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-heading text-lg text-white">{r.title}</h4>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteResp(r.id, r.title)}
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                      title="Delete Responsibility"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-white/60">
+                    <span>Required Count:</span>
+                    <span className="font-mono text-amber-300 font-bold">{r.requiredCount} students</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs text-white/60">
+                    <span>Gender Rule:</span>
+                    <span className="font-mono text-white/80">{r.genderRule}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 8. NOTICES VIEW                                          */}
+        {/* ======================================================== */}
+        {activeTab === 'notices' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-heading text-2xl text-white">Official Institutional Notices</h2>
+                <p className="text-xs text-white/50">Publish circulars to students or all users.</p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowAddNoticeModal(true)}
+                icon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Post New Notice
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {notices.map((n) => (
+                <div key={n.id} className="p-6 rounded-3xl glass-panel flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-heading text-lg text-white">{n.title}</h3>
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-400/20 text-amber-300">
+                        {n.priority}
+                      </span>
+                      <span className="text-[10px] text-white/40 uppercase">Audience: {n.targetAudience}</span>
+                    </div>
+                    <p className="text-xs text-white/70 leading-relaxed max-w-2xl">{n.content}</p>
+                    <span className="text-[10px] text-white/40 block mt-3">
+                      Posted: {new Date(n.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={async () => {
+                      await api.deleteNotice(n.id);
+                      showToast('Notice deleted.');
+                      loadTabContent();
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* 9. AUDIT LOGS VIEW                                       */}
+        {/* ======================================================== */}
+        {activeTab === 'logs' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div>
+              <h2 className="font-heading text-2xl text-white">System Security & Activity Audit Trail</h2>
+              <p className="text-xs text-white/50">All administrative operations and logins are logged immutably.</p>
+            </div>
+
+            <div className="p-6 rounded-3xl glass-panel overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/40 uppercase tracking-wider">
+                    <th className="pb-3 pl-2">Action</th>
+                    <th className="pb-3">Actor</th>
+                    <th className="pb-3">Role</th>
+                    <th className="pb-3">Details</th>
+                    <th className="pb-3">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-white/5">
+                      <td className="py-3 pl-2 font-mono text-amber-300 font-semibold">{log.action}</td>
+                      <td className="py-3 text-white">{log.actorEmail}</td>
+                      <td className="py-3 text-white/60">{log.actorRole}</td>
+                      <td className="py-3 text-white/70">{log.details || '-'}</td>
+                      <td className="py-3 text-white/40 font-mono">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* FOOTER */}
+      <footer className="relative z-10 w-full py-6 border-t border-white/10 text-center text-xs text-white/40 tracking-wider uppercase font-light">
+        © 2026 DBSM Academy. All rights reserved.
+      </footer>
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD STUDENT                                       */}
+      {/* ======================================================== */}
+      {showAddStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-lg p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Register Authorized Student</h3>
+            <p className="text-xs text-white/50 mb-5">
+              Creating a student automatically authorizes their email for passwordless OTP access.
+            </p>
+            <form onSubmit={handleCreateStudent} className="space-y-4">
+              <Input
+                label="Full Name"
+                value={newStudent.name}
+                onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                required
+              />
+              <Input
+                type="email"
+                label="Institutional Email (Used for OTP)"
+                value={newStudent.email}
+                onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                required
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Gender</label>
+                  <select
+                    value={newStudent.gender}
+                    onChange={(e) => setNewStudent({ ...newStudent, gender: e.target.value as any })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="Male" className="bg-neutral-900">Male</option>
+                    <option value="Female" className="bg-neutral-900">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Residency</label>
+                  <select
+                    value={newStudent.dayScholar ? 'Day Scholar' : 'Hosteller'}
+                    onChange={(e) => setNewStudent({ ...newStudent, dayScholar: e.target.value === 'Day Scholar' })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="Hosteller" className="bg-neutral-900">Hosteller</option>
+                    <option value="Day Scholar" className="bg-neutral-900">Day Scholar</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs uppercase tracking-wider text-white/60">Language</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomLangInput(!isCustomLangInput);
+                        setNewStudent({ ...newStudent, languageName: '' });
+                      }}
+                      className="text-[10px] text-amber-300 hover:text-amber-200 underline cursor-pointer"
+                    >
+                      {isCustomLangInput ? '↺ Select from list' : '+ Type new language'}
+                    </button>
+                  </div>
+
+                  {isCustomLangInput ? (
+                    <input
+                      type="text"
+                      placeholder="Type language (e.g. Marathi, French)..."
+                      value={newStudent.languageName}
+                      onChange={(e) => setNewStudent({ ...newStudent, languageName: e.target.value })}
+                      className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                      required
+                      autoFocus
+                    />
+                  ) : (
+                    <select
+                      value={newStudent.languageName}
+                      onChange={(e) => setNewStudent({ ...newStudent, languageName: e.target.value })}
+                      className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                      required
+                    >
+                      <option value="" disabled className="bg-neutral-900">
+                        -- Select Student Language --
+                      </option>
+                      {languages.map((l) => (
+                        <option key={l.id} value={l.name} className="bg-neutral-900">
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <Input
+                  label="Batch / Year"
+                  value={newStudent.batch}
+                  onChange={(e) => setNewStudent({ ...newStudent, batch: e.target.value })}
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddStudentModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Authorize Student
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: IMPORT EXCEL / JSON                               */}
+      {/* ======================================================== */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-xl p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Bulk Import Students</h3>
+            <p className="text-xs text-white/50 mb-4">
+              Paste JSON student array or parsed spreadsheet objects with Name, Email, Gender, Residency, Language.
+            </p>
+            <textarea
+              rows={8}
+              placeholder={`[\n  {\n    "name": "Francis Xavier",\n    "email": "francis@gmail.com",\n    "gender": "Male",\n    "residency": "Hosteller",\n    "language": "Tamil"\n  }\n]`}
+              value={importJsonText}
+              onChange={(e) => setImportJsonText(e.target.value)}
+              className="w-full p-4 rounded-2xl glass-input text-xs font-mono text-white outline-none resize-none"
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowImportModal(false)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={handleImportStudents} isLoading={isProcessing}>
+                Run Server Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD LANGUAGE                                      */}
+      {/* ======================================================== */}
+      {showAddLanguageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm p-7 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-lg text-white mb-2">Add New Language</h3>
+            <p className="text-xs text-white/50 mb-4">
+              Automatically capitalized and available across all modules.
+            </p>
+            <form onSubmit={handleAddLanguage} className="space-y-4">
+              <Input
+                label="Language Title"
+                placeholder="e.g. Marathi"
+                value={newLangName}
+                onChange={(e) => setNewLangName(e.target.value)}
+                required
+                autoFocus
+              />
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddLanguageModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Save Language
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD DORMITORY ROOM / HALL                         */}
+      {/* ======================================================== */}
+      {showAddRoomModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Add Dormitory Hall / Room</h3>
+            <p className="text-xs text-white/50 mb-5">
+              Configure room name, number, gender allocation, and maximum bed capacity.
+            </p>
+            <form onSubmit={handleCreateRoom} className="space-y-4">
+              <Input
+                label="Room / Hall Name (e.g. Room 101, St. John Hall)"
+                value={newRoom.name}
+                onChange={(e) => setNewRoom({ ...newRoom, name: e.target.value })}
+                required
+                autoFocus
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Gender Rule</label>
+                  <select
+                    value={newRoom.gender}
+                    onChange={(e) => setNewRoom({ ...newRoom, gender: e.target.value as any })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="Male" className="bg-neutral-900">Male Only</option>
+                    <option value="Female" className="bg-neutral-900">Female Only</option>
+                  </select>
+                </div>
+                <div>
+                  <Input
+                    type="number"
+                    label="Bed Capacity"
+                    min={1}
+                    max={50}
+                    value={newRoom.capacity.toString()}
+                    onChange={(e) => setNewRoom({ ...newRoom, capacity: parseInt(e.target.value) || 1 })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddRoomModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Save Hall / Room
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD REFECTORY DINING TABLE                        */}
+      {/* ======================================================== */}
+      {showAddTableModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Add Dining Table</h3>
+            <p className="text-xs text-white/50 mb-5">
+              Configure dining table name, number, seat capacity, and gender seating rule.
+            </p>
+            <form onSubmit={handleCreateTable} className="space-y-4">
+              <Input
+                label="Table Name (e.g. Table 05 - St. Joseph)"
+                value={newTable.name}
+                onChange={(e) => setNewTable({ ...newTable, name: e.target.value })}
+                required
+                autoFocus
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Gender Rule</label>
+                  <select
+                    value={newTable.genderRule}
+                    onChange={(e) => setNewTable({ ...newTable, genderRule: e.target.value })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="ANY" className="bg-neutral-900">Any (Mixed / Co-ed)</option>
+                    <option value="MALE_ONLY" className="bg-neutral-900">Male Only</option>
+                    <option value="FEMALE_ONLY" className="bg-neutral-900">Female Only</option>
+                  </select>
+                </div>
+                <div>
+                  <Input
+                    type="number"
+                    label="Seat Capacity"
+                    min={1}
+                    max={30}
+                    value={newTable.capacity.toString()}
+                    onChange={(e) => setNewTable({ ...newTable, capacity: parseInt(e.target.value) || 1 })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddTableModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Save Table
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD NOTICE                                        */}
+      {/* ======================================================== */}
+      {showAddNoticeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Publish Institutional Notice</h3>
+            <form onSubmit={handleAddNotice} className="space-y-4">
+              <Input
+                label="Headline"
+                value={newNotice.title}
+                onChange={(e) => setNewNotice({ ...newNotice, title: e.target.value })}
+                required
+              />
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Content</label>
+                <textarea
+                  rows={4}
+                  value={newNotice.content}
+                  onChange={(e) => setNewNotice({ ...newNotice, content: e.target.value })}
+                  className="w-full p-4 rounded-2xl glass-input text-xs text-white outline-none resize-none"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Target Audience</label>
+                  <select
+                    value={newNotice.targetAudience}
+                    onChange={(e) => setNewNotice({ ...newNotice, targetAudience: e.target.value })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="ALL" className="bg-neutral-900">All Users</option>
+                    <option value="STUDENT" className="bg-neutral-900">Students Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Priority</label>
+                  <select
+                    value={newNotice.priority}
+                    onChange={(e) => setNewNotice({ ...newNotice, priority: e.target.value })}
+                    className="w-full px-4 py-3 rounded-full glass-input text-xs text-white outline-none"
+                  >
+                    <option value="NORMAL" className="bg-neutral-900">Normal</option>
+                    <option value="HIGH" className="bg-neutral-900">High</option>
+                    <option value="URGENT" className="bg-neutral-900">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddNoticeModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Publish
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ADD SPECIAL RESPONSIBILITY                        */}
+      {/* ======================================================== */}
+      {showAddRespModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <h3 className="font-heading text-xl text-white mb-2">Configure Special Role</h3>
+            <form onSubmit={handleAddResp} className="space-y-4">
+              <Input
+                label="Role Title"
+                placeholder="e.g. Sound System Team"
+                value={newResp.title}
+                onChange={(e) => setNewResp({ ...newResp, title: e.target.value })}
+                required
+              />
+              <Input
+                type="number"
+                label="Required Number of Students"
+                value={newResp.requiredCount}
+                onChange={(e) => setNewResp({ ...newResp, requiredCount: parseInt(e.target.value) || 1 })}
+                min={1}
+                required
+              />
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddRespModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm" isLoading={isProcessing}>
+                  Create Role
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: CUSTOM CONFIRMATION POPUP DIALOG                  */}
+      {/* ======================================================== */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md p-7 rounded-3xl glass-panel border border-white/20 shadow-2xl">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-heading text-lg text-white font-medium">{confirmModal.title}</h3>
+                <span className="text-[10px] uppercase tracking-wider text-red-400/80 font-mono">
+                  Permanent Action
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-white/70 leading-relaxed font-light mb-6">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={closeConfirm}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={confirmModal.onConfirm}
+                className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs font-semibold tracking-wider uppercase transition-all shadow-lg hover:shadow-red-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{confirmModal.confirmLabel || 'Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  role          String   // "ADMIN" | "STUDENT"
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+  studentId     String?  @unique
+  student       Student? @relation(fields: [studentId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([email])
+}
+
+model Language {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  code      String?
+  isActive  Boolean   @default(true)
+  students  Student[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Student {
+  id          String   @id @default(uuid())
+  studentId   String   @unique // e.g. "STU-0001"
+  name        String
+  email       String   @unique
+  gender      String   // "Male" | "Female"
+  religion    String   // "Christian" | "Hindu" | "Muslim" | "Other"
+  dayScholar  Boolean  @default(false)
+  batch       String   @default("Batch 2026")
+  languageId  String?
+  language    Language? @relation(fields: [languageId], references: [id])
+  isActive    Boolean  @default(true)
+  user        User?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dormitoryAllocations DormitoryAllocation[]
+  refectoryAllocations RefectoryAllocation[]
+  dutyAssignments      DutyAssignment[]
+
+  @@index([email])
+  @@index([studentId])
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String
+  otpHash   String
+  role      String   // "ADMIN" | "STUDENT"
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model DormitoryRoom {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  gender      String   // "Male" | "Female"
+  capacity    Int      @default(6)
+  isActive    Boolean  @default(true)
+  allocations DormitoryAllocation[]
+}
+
+model DormitoryAllocation {
+  id               String        @id @default(uuid())
+  roomId           String
+  room             DormitoryRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  term             String        @default("Term 1 - 2026")
+  isManualOverride Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+
+  @@unique([roomId, studentId, term])
+}
+
+model RefectoryTable {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  capacity    Int      @default(8)
+  genderRule  String   @default("ANY")
+  isActive    Boolean  @default(true)
+  allocations RefectoryAllocation[]
+}
+
+model RefectoryAllocation {
+  id               String         @id @default(uuid())
+  tableId          String
+  table            RefectoryTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  seatNumber       Int
+  studentId        String
+  student          Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  term             String         @default("Term 1 - 2026")
+  isManualOverride Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+
+  @@unique([tableId, seatNumber, term])
+}
+
+model SpecialResponsibility {
+  id            String   @id @default(uuid())
+  title         String   @unique
+  requiredCount Int      @default(2)
+  genderRule    String   @default("ANY")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+model DutyAssignment {
+  id               String   @id @default(uuid())
+  dutyType         String   // "MORNING_JOB" | "HOUSE_CLEANING" | "SPECIAL_RESPONSIBILITY" | "MASS_READING" | "ASSEMBLY"
+  title            String
+  date             String
+  studentId        String
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  notes            String?
+  isManualOverride Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@index([date, dutyType])
+}
+
+model Notice {
+  id             String   @id @default(uuid())
+  title          String
+  content        String
+  targetAudience String   @default("ALL")
+  priority       String   @default("NORMAL")
+  published      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  action     String
+  actorEmail String
+  actorRole  String
+  details    String?
+  createdAt  DateTime @default(now())
+}
