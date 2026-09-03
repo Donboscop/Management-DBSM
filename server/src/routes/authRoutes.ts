@@ -106,12 +106,16 @@ router.post('/request-otp', async (req: Request, res: Response): Promise<void> =
       },
     });
 
-    // Send via email service (Never returned to client in response)
-    await sendOtpEmail({
-      email,
-      otp,
-      role: role as 'ADMIN' | 'STUDENT',
-    });
+    // Send via email service safely without throwing 500 if provider fails
+    try {
+      await sendOtpEmail({
+        email,
+        otp,
+        role: role as 'ADMIN' | 'STUDENT',
+      });
+    } catch (mailErr) {
+      console.error('Email dispatch warning (non-fatal):', mailErr);
+    }
 
     res.status(200).json({
       success: true,
@@ -120,9 +124,9 @@ router.post('/request-otp', async (req: Request, res: Response): Promise<void> =
       expiresAt: expiresAt.toISOString(),
       devOtp: process.env.NODE_ENV !== 'production' ? otp : undefined,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Request OTP error:', error);
-    res.status(500).json({ error: 'Failed to process verification code request' });
+    res.status(500).json({ error: error?.message || 'Failed to process verification code request' });
   }
 });
 
