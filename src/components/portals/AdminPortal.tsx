@@ -25,6 +25,11 @@ import {
   Sparkles,
   Briefcase,
   Clock,
+  FileText,
+  XCircle,
+  CalendarDays,
+  Check,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -35,11 +40,24 @@ export const AdminPortal: React.FC = () => {
   const { logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'notices' | 'logs'
+    'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'notices' | 'logs' | 'leaves'
   >('dashboard');
 
   // Dashboard Data
   const [dashboardData, setDashboardData] = useState<any>(null);
+  // Leaves Data
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [leaveFilter, setLeaveFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [leaveCounts, setLeaveCounts] = useState<{ all: number; pending: number; approved: number; rejected: number }>({
+    all: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+  });
+  const [reviewingLeave, setReviewingLeave] = useState<any | null>(null);
+  const [reviewDecision, setReviewDecision] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
+  const [reviewRemarks, setReviewRemarks] = useState('');
+  const [isUpdatingLeave, setIsUpdatingLeave] = useState(false);
   // Students Data
   const [students, setStudents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,9 +208,31 @@ export const AdminPortal: React.FC = () => {
       } else if (activeTab === 'logs') {
         const res = await api.getActivityLogs();
         setLogs(res.logs);
+      } else if (activeTab === 'leaves') {
+        const res = await api.getAdminLeaves(leaveFilter);
+        setLeaves(res.leaves || []);
+        if (res.counts) setLeaveCounts(res.counts);
       }
     } catch (err: any) {
       showToast(err.message, true);
+    }
+  };
+
+  const handleProcessLeaveStatus = async (leaveId: string, status: 'APPROVED' | 'REJECTED', remarks: string) => {
+    setIsUpdatingLeave(true);
+    try {
+      await api.updateLeaveStatus(leaveId, status, remarks);
+      showToast(`Leave application successfully ${status === 'APPROVED' ? 'approved' : 'rejected'}.`);
+      setReviewingLeave(null);
+      setReviewRemarks('');
+      // Reload leaves
+      const res = await api.getAdminLeaves(leaveFilter);
+      setLeaves(res.leaves || []);
+      if (res.counts) setLeaveCounts(res.counts);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update leave status', true);
+    } finally {
+      setIsUpdatingLeave(false);
     }
   };
 
@@ -568,12 +608,19 @@ export const AdminPortal: React.FC = () => {
         {/* LEFT: Logo */}
         <div
           onClick={() => setActiveTab('dashboard')}
-          className="flex items-center gap-2 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer group"
         >
-          <span className="font-heading text-lg sm:text-xl font-medium tracking-tight text-white group-hover:text-amber-200 transition-colors">
-            DBSM Academy<sup className="text-xs">®</sup>
-          </span>
-          <span className="text-amber-300 text-base select-none">✳︎</span>
+          <img
+            src="/logo.png"
+            alt="Don Bosco Tech Logo"
+            className="w-8 h-8 object-contain rounded-xl bg-white/90 p-0.5 border border-white/20 shadow-md group-hover:scale-105 transition-transform"
+          />
+          <div className="flex items-center gap-1.5">
+            <span className="font-heading text-lg sm:text-xl font-medium tracking-tight text-white group-hover:text-amber-200 transition-colors">
+              DBSM Academy<sup className="text-xs">®</sup>
+            </span>
+            <span className="text-amber-300 text-base select-none">✳︎</span>
+          </div>
         </div>
 
         {/* CENTER: Navigation Links */}
@@ -636,11 +683,19 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setActiveTab('duties')}
-            className="text-white/70 hover:text-white transition-colors cursor-pointer"
+            onClick={() => setActiveTab('leaves')}
+            className={`transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'leaves' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
           >
-            Ministry
+            <span>Leaves</span>
+            {dashboardData?.stats?.pendingLeavesCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black font-mono font-bold text-[9px]">
+                {dashboardData.stats.pendingLeavesCount}
+              </span>
+            )}
           </button>
+
           <button
             onClick={() => setActiveTab('notices')}
             className={`transition-colors cursor-pointer ${
@@ -715,6 +770,7 @@ export const AdminPortal: React.FC = () => {
               { id: 'refectory', label: 'Refectory', icon: <Utensils className="w-3.5 h-3.5 mr-1" /> },
               { id: 'duties', label: 'Daily Duties', icon: <Calendar className="w-3.5 h-3.5 mr-1" /> },
               { id: 'responsibilities', label: 'Special Roles', icon: <Layers className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'leaves', label: 'Leaves', icon: <FileText className="w-3.5 h-3.5 mr-1" /> },
               { id: 'notices', label: 'Notices & Posters', icon: <Bell className="w-3.5 h-3.5 mr-1" /> },
               { id: 'logs', label: 'Audit Logs', icon: <ShieldAlert className="w-3.5 h-3.5 mr-1" /> },
             ].map((tab) => (
@@ -778,6 +834,19 @@ export const AdminPortal: React.FC = () => {
                 >
                   <Utensils className="w-4 h-4" />
                   <span>Refectory</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('leaves')}
+                  className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all border border-white/15 backdrop-blur-md cursor-pointer relative"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Leaves</span>
+                  {dashboardData?.stats?.pendingLeavesCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black font-mono font-bold text-[9px]">
+                      {dashboardData.stats.pendingLeavesCount}
+                    </span>
+                  )}
                 </button>
 
                 <div className="relative group/heroduties">
@@ -1580,6 +1649,214 @@ export const AdminPortal: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ======================================================== */}
+        {/* 10. LEAVE MANAGEMENT VIEW                                */}
+        {/* ======================================================== */}
+        {activeTab === 'leaves' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header & Filter Bar */}
+            <div className="p-8 rounded-3xl glass-panel flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-amber-300 font-mono px-2.5 py-0.5 rounded-full bg-amber-400/10 border border-amber-300/30">
+                    Institutional Attendance
+                  </span>
+                  {leaveCounts.pending > 0 && (
+                    <span className="text-[10px] uppercase font-bold text-black px-2 py-0.5 rounded-full bg-amber-400 animate-pulse">
+                      {leaveCounts.pending} Action Required
+                    </span>
+                  )}
+                </div>
+                <h2 className="font-heading text-2xl sm:text-3xl text-white tracking-tight">
+                  Student Leave Applications
+                </h2>
+                <p className="text-xs text-white/50 max-w-xl mt-1">
+                  Review student leave requests, authorize date spans, add institutional administrative remarks, or decline applications.
+                </p>
+              </div>
+
+              {/* Status Filter Buttons */}
+              <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-black/40 border border-white/10 shrink-0">
+                {[
+                  { id: 'ALL', label: 'All', count: leaveCounts.all },
+                  { id: 'PENDING', label: 'Pending', count: leaveCounts.pending },
+                  { id: 'APPROVED', label: 'Approved', count: leaveCounts.approved },
+                  { id: 'REJECTED', label: 'Rejected', count: leaveCounts.rejected },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={async () => {
+                      setLeaveFilter(f.id as any);
+                      const res = await api.getAdminLeaves(f.id);
+                      setLeaves(res.leaves || []);
+                      if (res.counts) setLeaveCounts(res.counts);
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-2 ${
+                      leaveFilter === f.id
+                        ? 'bg-white text-black font-semibold shadow-md'
+                        : 'text-white/60 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        leaveFilter === f.id ? 'bg-black/20 text-black' : 'bg-white/10 text-white/70'
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Leave Applications List */}
+            <div className="space-y-4">
+              {leaves.length > 0 ? (
+                leaves.map((leave) => {
+                  const isPending = leave.status === 'PENDING';
+                  const isApproved = leave.status === 'APPROVED';
+                  const isRejected = leave.status === 'REJECTED';
+
+                  return (
+                    <div
+                      key={leave.id}
+                      className="p-6 sm:p-7 rounded-3xl glass-panel border border-white/10 hover:border-white/20 transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
+                    >
+                      {/* Left: Student & Reason Info */}
+                      <div className="space-y-3 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-300/30 flex items-center justify-center font-heading text-amber-200 text-sm font-semibold">
+                            {leave.student?.name ? leave.student.name.charAt(0).toUpperCase() : 'S'}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-heading font-medium text-white">
+                                {leave.student?.name || 'Unknown Student'}
+                              </h3>
+                              <span className="text-xs font-mono text-amber-300/90 px-2 py-0.5 rounded bg-amber-400/10 border border-amber-300/20">
+                                {leave.student?.studentId || 'STU-0001'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-white/50">
+                              {leave.student?.email} • {leave.student?.gender || 'N/A'} • {leave.student?.dayScholar ? 'Day Scholar' : 'Hosteller'} • {leave.student?.language?.name || 'Not Specified'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Subject & Reason */}
+                        <div className="pl-13 space-y-1.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xs font-semibold text-white tracking-wide">
+                              Subject: {leave.subject}
+                            </span>
+                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-white/70">
+                              {leave.totalDays} {leave.totalDays === 1 ? 'Day' : 'Days'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-white/70 leading-relaxed max-w-2xl bg-white/5 p-3 rounded-xl border border-white/5">
+                            {leave.reason}
+                          </p>
+
+                          {leave.adminRemarks && (
+                            <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-300/20 text-xs text-amber-200 flex items-center gap-2">
+                              <span className="font-semibold text-white/80">Admin Remark:</span>
+                              <span>{leave.adminRemarks}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: Date Span & Decision Action */}
+                      <div className="flex flex-col items-start md:items-end justify-between self-stretch md:self-auto gap-4 pt-4 md:pt-0 border-t md:border-t-0 border-white/10">
+                        {/* Dates */}
+                        <div className="text-right">
+                          <div className="flex items-center gap-2 text-white font-mono font-medium text-xs">
+                            <CalendarDays className="w-4 h-4 text-amber-300" />
+                            <span>{leave.startDate}</span>
+                            <span className="text-white/40">→</span>
+                            <span>{leave.endDate}</span>
+                          </div>
+                          <span className="text-[10px] text-white/40 block mt-1">
+                            Applied: {new Date(leave.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Status Badge or Decision Action */}
+                        <div className="flex items-center gap-2.5">
+                          {isPending ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setReviewingLeave(leave);
+                                  setReviewDecision('APPROVED');
+                                  setReviewRemarks('');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold tracking-wider uppercase transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Approve</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setReviewingLeave(leave);
+                                  setReviewDecision('REJECTED');
+                                  setReviewRemarks('');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white text-xs font-semibold tracking-wider uppercase transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Reject</span>
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {isApproved && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-semibold text-emerald-300 bg-emerald-400/15 border border-emerald-300/30">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  APPROVED
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-semibold text-rose-300 bg-rose-400/15 border border-rose-300/30">
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  REJECTED
+                                </span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setReviewingLeave(leave);
+                                  setReviewDecision(leave.status === 'APPROVED' ? 'REJECTED' : 'APPROVED');
+                                  setReviewRemarks(leave.adminRemarks || '');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-white/50 hover:text-white text-[10px] tracking-wider uppercase transition-colors"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-12 rounded-3xl glass-panel text-center">
+                  <FileText className="w-12 h-12 text-white/20 mx-auto mb-3" />
+                  <h3 className="text-base font-heading text-white mb-1">No Leave Requests</h3>
+                  <p className="text-xs text-white/50 max-w-md mx-auto">
+                    {leaveFilter === 'ALL'
+                      ? 'No student leave applications have been submitted yet.'
+                      : `No leave applications found under the "${leaveFilter}" filter.`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* FOOTER */}
@@ -1964,6 +2241,131 @@ export const AdminPortal: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: REVIEW & DECIDE LEAVE APPLICATION                  */}
+      {/* ======================================================== */}
+      {reviewingLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-lg p-7 sm:p-8 rounded-3xl glass-panel border border-white/20 shadow-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+              <div>
+                <span className="text-[10px] tracking-[0.2em] uppercase font-mono text-amber-300">
+                  Administration Review
+                </span>
+                <h2 className="font-heading text-xl text-white font-medium">
+                  {reviewDecision === 'APPROVED' ? 'Approve Leave Request' : 'Decline Leave Request'}
+                </h2>
+              </div>
+              <button
+                onClick={() => setReviewingLeave(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center text-sm transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Applicant Summary */}
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2 mb-4 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-white/50">Student:</span>
+                <span className="font-medium text-white">{reviewingLeave.student?.name} ({reviewingLeave.student?.studentId})</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/50">Subject:</span>
+                <span className="font-medium text-amber-200">{reviewingLeave.subject}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/50">Duration:</span>
+                <span className="font-mono text-white">
+                  {reviewingLeave.startDate} → {reviewingLeave.endDate} ({reviewingLeave.totalDays} Days)
+                </span>
+              </div>
+              <div className="pt-2 border-t border-white/5 text-white/70 leading-relaxed">
+                <span className="text-white/40 block mb-1">Reason:</span>
+                {reviewingLeave.reason}
+              </div>
+            </div>
+
+            {/* Decision Toggle */}
+            <div className="mb-4">
+              <label className="block text-xs uppercase tracking-wider text-white/60 mb-2">Decision</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewDecision('APPROVED')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                    reviewDecision === 'APPROVED'
+                      ? 'bg-emerald-500 border-emerald-400 text-black shadow-lg'
+                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Approve Leave</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewDecision('REJECTED')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                    reviewDecision === 'REJECTED'
+                      ? 'bg-rose-600 border-rose-500 text-white shadow-lg'
+                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  }`}
+                >
+                  <X className="w-4 h-4" />
+                  <span>Reject Leave</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Admin Remarks Input */}
+            <div className="mb-6">
+              <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5">
+                Administrator Remarks / Instructions (Visible to Student)
+              </label>
+              <textarea
+                rows={3}
+                placeholder={
+                  reviewDecision === 'APPROVED'
+                    ? 'e.g. Leave granted. Report back to hostel warden on completion.'
+                    : 'e.g. Attendance is mandatory due to scheduled semester practicals.'
+                }
+                value={reviewRemarks}
+                onChange={(e) => setReviewRemarks(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl glass-input text-white text-xs outline-none border border-white/15 focus:border-amber-400/60 transition-all resize-none"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setReviewingLeave(null)}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={() => handleProcessLeaveStatus(reviewingLeave.id, reviewDecision, reviewRemarks.trim())}
+                disabled={isUpdatingLeave}
+                className={`px-6 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                  reviewDecision === 'APPROVED'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-black'
+                    : 'bg-rose-600 hover:bg-rose-500 text-white'
+                }`}
+              >
+                {isUpdatingLeave
+                  ? 'Saving...'
+                  : reviewDecision === 'APPROVED'
+                  ? 'Confirm Approval'
+                  : 'Confirm Rejection'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -69,6 +69,12 @@ export const api = {
   getStudentDuties: () =>
     request<{ success: boolean; assignments: any[]; grouped: any }>('/student/duties'),
   getStudentNotices: () => request<{ success: boolean; notices: any[] }>('/student/notices'),
+  getStudentLeaves: () => request<{ success: boolean; leaves: any[] }>('/student/leaves'),
+  submitLeaveRequest: (data: { subject: string; startDate: string; endDate: string; reason: string }) =>
+    request<{ success: boolean; message: string; leave: any }>('/student/leaves', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   // Admin
   getDashboard: () =>
@@ -229,4 +235,16 @@ export const api = {
   getActivityLogs: () => request<{ success: boolean; logs: any[] }>('/admin/activity-logs'),
 
   getBackup: () => request<{ success: boolean; backup: any }>('/admin/backup'),
+
+  // Leave Management (Admin)
+  getAdminLeaves: (status?: string) =>
+    request<{ success: boolean; leaves: any[]; counts: { all: number; pending: number; approved: number; rejected: number } }>(
+      `/admin/leaves${status && status !== 'ALL' ? `?status=${status}` : ''}`
+    ),
+
+  updateLeaveStatus: (id: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', adminRemarks?: string) =>
+    request<{ success: boolean; message: string; leave: any }>(`/admin/leaves/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, adminRemarks }),
+    }),
 };

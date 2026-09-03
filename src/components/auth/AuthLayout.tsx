@@ -36,13 +36,20 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
 
       {/* Cinematic Header Navigation */}
       <header className="relative z-10 w-full px-6 sm:px-12 py-7 flex items-center justify-between">
-        <div className="flex flex-col">
-          <span className="font-heading text-lg sm:text-xl tracking-[0.2em] uppercase text-white font-semibold flex items-center gap-2">
-            DON BOSCO SKILL MISSION<sup className="text-xs text-amber-300 font-normal">®</sup>
-          </span>
-          <span className="text-[10px] sm:text-xs text-white/50 tracking-[0.25em] uppercase font-light mt-0.5">
-            Empowering Youths • Transforming Lives
-          </span>
+        <div className="flex items-center gap-3.5">
+          <img
+            src="/logo.png"
+            alt="Don Bosco Tech Logo"
+            className="w-10 h-10 object-contain rounded-xl bg-white/90 p-1 shadow-lg border border-white/20"
+          />
+          <div className="flex flex-col">
+            <span className="font-heading text-lg sm:text-xl tracking-[0.2em] uppercase text-white font-semibold flex items-center gap-2">
+              DON BOSCO SKILL MISSION<sup className="text-xs text-amber-300 font-normal">®</sup>
+            </span>
+            <span className="text-[10px] sm:text-xs text-white/50 tracking-[0.25em] uppercase font-light mt-0.5">
+              Empowering Youths • Transforming Lives
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">

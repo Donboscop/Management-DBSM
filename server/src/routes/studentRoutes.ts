@@ -153,23 +153,87 @@ router.get('/duties', async (req: AuthenticatedRequest, res: Response): Promise<
   }
 });
 
-// GET /api/student/notices - Student-visible notices
-router.get('/notices', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+// GET /api/student/leaves - Student's own leave requests
+router.get('/leaves', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const notices = await prisma.notice.findMany({
-      where: {
-        published: true,
-        targetAudience: { in: ['ALL', 'STUDENT'] },
-      },
+    const studentId = await getStudentOrThrow(req, res);
+    if (!studentId) return;
+
+    const leaves = await prisma.leaveRequest.findMany({
+      where: { studentId },
       orderBy: { createdAt: 'desc' },
     });
 
     res.status(200).json({
       success: true,
-      notices,
+      leaves,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to load notices' });
+    console.error('Student get leaves error:', error);
+    res.status(500).json({ error: 'Failed to load leave applications' });
+  }
+});
+
+// POST /api/student/leaves - Submit a new leave application
+router.post('/leaves', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const studentId = await getStudentOrThrow(req, res);
+    if (!studentId) return;
+
+    const { subject, startDate, endDate, reason } = req.body;
+
+    if (!subject || !startDate || !endDate || !reason) {
+      res.status(400).json({ error: 'Subject, start date, end date, and reason are required' });
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      res.status(400).json({ error: 'Invalid start or end date format' });
+      return;
+    }
+
+    if (end < start) {
+      res.status(400).json({ error: 'End date cannot be earlier than start date' });
+      return;
+    }
+
+    // Calculate total inclusive calendar days
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    const leave = await prisma.leaveRequest.create({
+      data: {
+        studentId,
+        subject: subject.trim(),
+        startDate,
+        endDate,
+        totalDays,
+        reason: reason.trim(),
+        status: 'PENDING',
+      },
+    });
+
+    // Log Activity
+    await prisma.activityLog.create({
+      data: {
+        action: 'SUBMIT_LEAVE_REQUEST',
+        actorEmail: req.user?.email || 'student',
+        actorRole: 'STUDENT',
+        details: `Submitted leave request for ${totalDays} day(s) (${startDate} to ${endDate}) - ${subject}`,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Leave application submitted successfully for review',
+      leave,
+    });
+  } catch (error) {
+    console.error('Submit leave error:', error);
+    res.status(500).json({ error: 'Failed to submit leave application' });
   }
 });
 

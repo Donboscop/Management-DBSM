@@ -39,6 +39,7 @@ router.get('/dashboard', async (_req: AuthenticatedRequest, res: Response): Prom
     const activeTables = await prisma.refectoryTable.count({ where: { isActive: true } });
     const activeResponsibilities = await prisma.specialResponsibility.count({ where: { active: true } });
     const noticesCount = await prisma.notice.count({ where: { published: true } });
+    const pendingLeavesCount = await prisma.leaveRequest.count({ where: { status: 'PENDING' } });
 
     const recentLogs = await prisma.activityLog.findMany({
       orderBy: { createdAt: 'desc' },
@@ -115,6 +116,7 @@ router.get('/dashboard', async (_req: AuthenticatedRequest, res: Response): Prom
         activeTables,
         activeResponsibilities,
         noticesCount,
+        pendingLeavesCount,
       },
       languages: languages
         .map((l) => ({
@@ -1348,6 +1350,105 @@ router.get('/backup', async (_req: AuthenticatedRequest, res: Response): Promise
     res.status(200).json({ success: true, backup: snapshot });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create backup' });
+  }
+// ==========================================
+// 10. LEAVE MANAGEMENT (REVIEW / APPROVE / REJECT)
+// ==========================================
+router.get('/leaves', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const status = req.query.status as string;
+    const whereClause: any = {};
+    if (status && status !== 'ALL') {
+      whereClause.status = status.toUpperCase();
+    }
+
+    const leaves = await prisma.leaveRequest.findMany({
+      where: whereClause,
+      include: {
+        student: {
+          include: {
+            language: true,
+            dormitoryAllocations: { include: { room: true } },
+            refectoryAllocations: { include: { table: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const pendingCount = await prisma.leaveRequest.count({ where: { status: 'PENDING' } });
+    const approvedCount = await prisma.leaveRequest.count({ where: { status: 'APPROVED' } });
+    const rejectedCount = await prisma.leaveRequest.count({ where: { status: 'REJECTED' } });
+
+    res.status(200).json({
+      success: true,
+      leaves,
+      counts: {
+        all: leaves.length,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+      },
+    });
+  } catch (error) {
+    console.error('Admin get leaves error:', error);
+    res.status(500).json({ error: 'Failed to fetch leave requests' });
+  }
+});
+
+router.put('/leaves/:id/status', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, adminRemarks } = req.body;
+
+    if (!status || !['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
+      res.status(400).json({ error: 'Valid status (APPROVED | REJECTED | PENDING) is required' });
+      return;
+    }
+
+    const existing = await prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { student: true },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Leave request not found' });
+      return;
+    }
+
+    const updated = await prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        status,
+        adminRemarks: adminRemarks !== undefined ? adminRemarks : existing.adminRemarks,
+        reviewedBy: req.user?.email || 'admin',
+        reviewedAt: new Date(),
+      },
+      include: {
+        student: {
+          include: { language: true },
+        },
+      },
+    });
+
+    // Activity Log
+    await prisma.activityLog.create({
+      data: {
+        action: `LEAVE_${status}`,
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Leave application for ${existing.student.name} (${existing.student.studentId}) was marked as ${status}. Subject: ${existing.subject}`,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Leave application marked as ${status}`,
+      leave: updated,
+    });
+  } catch (error) {
+    console.error('Update leave status error:', error);
+    res.status(500).json({ error: 'Failed to update leave status' });
   }
 });
 

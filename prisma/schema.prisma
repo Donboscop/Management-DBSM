@@ -51,6 +51,7 @@ model Student {
   dormitoryAllocations DormitoryAllocation[]
   refectoryAllocations RefectoryAllocation[]
   dutyAssignments      DutyAssignment[]
+  leaveRequests        LeaveRequest[]
 
   @@index([email])
   @@index([studentId])
@@ -153,4 +154,24 @@ model ActivityLog {
   actorRole  String
   details    String?
   createdAt  DateTime @default(now())
+}
+
+model LeaveRequest {
+  id           String    @id @default(uuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      String
+  startDate    String    // YYYY-MM-DD
+  endDate      String    // YYYY-MM-DD
+  totalDays    Int       @default(1)
+  reason       String
+  status       String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  adminRemarks String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([studentId, status])
+  @@index([status])
 }
