@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,13 +10,31 @@ export interface SendOtpOptions {
   name?: string;
 }
 
-function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
-  return apiKey ? new Resend(apiKey) : null;
+function getTransporter() {
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+
+  if (!smtpUser || !smtpPass) {
+    return null;
+  }
+
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+  const secure = port === 465;
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
 }
 
 export async function sendOtpEmail(options: SendOtpOptions): Promise<boolean> {
-  // Always log to server terminal for instant inspection/debugging
+  // Always log security banner to server console for instant verification/debugging
   console.log('\n========================================================');
   console.log(`✉️  [DBSM AUTH DISPATCH] Verification OTP Code`);
   console.log(`   Recipient: ${options.email} (${options.role})`);
@@ -24,11 +42,13 @@ export async function sendOtpEmail(options: SendOtpOptions): Promise<boolean> {
   console.log(`   Validity : 5 Minutes`);
   console.log('========================================================\n');
 
-  const resend = getResendClient();
-  const fromAddress = process.env.EMAIL_FROM || 'DBSM Academy <onboarding@resend.dev>';
+  const transporter = getTransporter();
+  const fromAddress = process.env.SMTP_USER
+    ? `"DON BOSCO SKILL MISSION®" <${process.env.SMTP_USER}>`
+    : '"DBSM Academy" <no-reply@dbsmacademy.edu>';
 
-  if (!resend) {
-    console.warn('⚠️ RESEND_API_KEY not configured. Simulated dispatch only.');
+  if (!transporter) {
+    console.log('ℹ️ [SMTP Note] SMTP_USER & SMTP_PASS not set in .env. OTP logged to console above.');
     return true;
   }
 
@@ -77,22 +97,17 @@ export async function sendOtpEmail(options: SendOtpOptions): Promise<boolean> {
     </html>
     `;
 
-    const result = await resend.emails.send({
+    const info = await transporter.sendMail({
       from: fromAddress,
       to: options.email,
       subject: `Your DBSM Security Code: ${options.otp}`,
       html: htmlContent,
     });
 
-    if (result.error) {
-      console.error('❌ Resend email dispatch error:', result.error);
-      return false;
-    }
-
-    console.log(`✅ [Resend] Dispatched security code to ${options.email} (Email ID: ${result.data?.id})`);
+    console.log(`✅ [Gmail SMTP] Dispatched security code to ${options.email} (Message ID: ${info.messageId})`);
     return true;
   } catch (err) {
-    console.error('❌ Error sending OTP via Resend:', err);
+    console.error('❌ SMTP Email Dispatch Warning:', err);
     return false;
   }
 }
