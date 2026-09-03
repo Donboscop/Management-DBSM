@@ -40,6 +40,17 @@ export async function seedDatabase() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { email: 'donboscop24@gmail.com' },
+    update: { isActive: true, role: 'ADMIN' },
+    create: {
+      email: 'donboscop24@gmail.com',
+      role: 'ADMIN',
+      isActive: true,
+      emailVerified: true,
+    },
+  });
+
   // 3. Seed Students
   const initialStudents = [
     {

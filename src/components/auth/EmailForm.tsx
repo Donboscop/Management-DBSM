@@ -119,7 +119,7 @@ export const EmailForm: React.FC<EmailFormProps> = ({ role, onBack, onOtpRequest
           <Info className="w-3.5 h-3.5 shrink-0" />
           <span>
             {isAdmin
-              ? 'Sample admin: admin@donbosco.edu'
+              ? 'Sample admin: donboscop24@gmail.com'
               : 'Sample student: donbosco@gmail.com'}
           </span>
         </div>
