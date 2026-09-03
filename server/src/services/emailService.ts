@@ -1,4 +1,7 @@
 import { Resend } from 'resend';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export interface SendOtpOptions {
   email: string;
@@ -7,9 +10,10 @@ export interface SendOtpOptions {
   name?: string;
 }
 
-const resendApiKey = process.env.RESEND_API_KEY;
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const fromAddress = process.env.EMAIL_FROM || 'DBSM Academy <onboarding@resend.dev>';
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  return apiKey ? new Resend(apiKey) : null;
+}
 
 export async function sendOtpEmail(options: SendOtpOptions): Promise<boolean> {
   // Always log to server terminal for instant inspection/debugging
@@ -19,6 +23,9 @@ export async function sendOtpEmail(options: SendOtpOptions): Promise<boolean> {
   console.log(`   OTP CODE : >>> ${options.otp} <<<`);
   console.log(`   Validity : 5 Minutes`);
   console.log('========================================================\n');
+
+  const resend = getResendClient();
+  const fromAddress = process.env.EMAIL_FROM || 'DBSM Academy <onboarding@resend.dev>';
 
   if (!resend) {
     console.warn('⚠️ RESEND_API_KEY not configured. Simulated dispatch only.');
