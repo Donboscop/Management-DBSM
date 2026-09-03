@@ -8,7 +8,7 @@ import { api } from '../../services/api';
 interface EmailFormProps {
   role: Role;
   onBack: () => void;
-  onOtpRequested: (email: string, cooldown: number, expiresAt: string, devOtp?: string) => void;
+  onOtpRequested: (email: string, cooldown: number, expiresAt: string) => void;
 }
 
 export const EmailForm: React.FC<EmailFormProps> = ({ role, onBack, onOtpRequested }) => {
@@ -37,7 +37,7 @@ export const EmailForm: React.FC<EmailFormProps> = ({ role, onBack, onOtpRequest
 
     try {
       const res = await api.requestOtp(cleanEmail, role);
-      onOtpRequested(cleanEmail, res.cooldownSeconds || 60, res.expiresAt, res.devOtp);
+      onOtpRequested(cleanEmail, res.cooldownSeconds || 60, res.expiresAt);
     } catch (err: any) {
       setError(err.message || 'Failed to send verification code. Please try again.');
     } finally {

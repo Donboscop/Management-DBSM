@@ -17,7 +17,6 @@ const AppContent: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [pendingEmail, setPendingEmail] = useState<string>('');
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(60);
-  const [devOtp, setDevOtp] = useState<string | undefined>(undefined);
 
   // If already authenticated, display corresponding portal
   if (isLoading) {
@@ -41,10 +40,9 @@ const AppContent: React.FC = () => {
     setStep('EMAIL_ENTRY');
   };
 
-  const handleOtpRequested = (email: string, cooldown: number, _expiresAt: string, testOtp?: string) => {
+  const handleOtpRequested = (email: string, cooldown: number) => {
     setPendingEmail(email);
     setCooldownSeconds(cooldown);
-    setDevOtp(testOtp);
     setStep('OTP_VERIFY');
   };
 
@@ -71,7 +69,6 @@ const AppContent: React.FC = () => {
           email={pendingEmail}
           role={selectedRole}
           initialCooldown={cooldownSeconds}
-          devOtp={devOtp}
           onSuccess={handleAuthSuccess}
           onChangeEmail={() => setStep('EMAIL_ENTRY')}
         />

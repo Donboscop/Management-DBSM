@@ -122,7 +122,6 @@ router.post('/request-otp', async (req: Request, res: Response): Promise<void> =
       message: `Verification code sent to ${email}`,
       cooldownSeconds: 60,
       expiresAt: expiresAt.toISOString(),
-      devOtp: process.env.NODE_ENV !== 'production' ? otp : undefined,
     });
   } catch (error: any) {
     console.error('Request OTP error:', error);

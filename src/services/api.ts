@@ -41,7 +41,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   // Auth
   requestOtp: (email: string, role: 'ADMIN' | 'STUDENT') =>
-    request<{ success: boolean; message: string; cooldownSeconds: number; expiresAt: string; devOtp?: string }>(
+    request<{ success: boolean; message: string; cooldownSeconds: number; expiresAt: string }>(
       '/auth/request-otp',
       {
         method: 'POST',

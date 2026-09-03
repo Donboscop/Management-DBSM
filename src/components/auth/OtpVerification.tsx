@@ -8,7 +8,6 @@ interface OtpVerificationProps {
   email: string;
   role: Role;
   initialCooldown?: number;
-  devOtp?: string;
   onSuccess: (token: string, user: any) => void;
   onChangeEmail: () => void;
 }
@@ -17,12 +16,10 @@ export const OtpVerification: React.FC<OtpVerificationProps> = ({
   email,
   role,
   initialCooldown = 60,
-  devOtp: initialDevOtp,
   onSuccess,
   onChangeEmail,
 }) => {
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
-  const [currentDevOtp, setCurrentDevOtp] = useState<string | undefined>(initialDevOtp);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(initialCooldown);
@@ -126,7 +123,6 @@ export const OtpVerification: React.FC<OtpVerificationProps> = ({
     try {
       const res = await api.requestOtp(email, role);
       setCooldown(res.cooldownSeconds || 60);
-      if (res.devOtp) setCurrentDevOtp(res.devOtp);
       setResendSuccess(true);
       setDigits(['', '', '', '', '', '']);
       inputsRef.current[0]?.focus();
@@ -174,24 +170,6 @@ export const OtpVerification: React.FC<OtpVerificationProps> = ({
             {email}
           </div>
         </div>
-
-        {/* Development Mode Quick Code Helper */}
-        {currentDevOtp && (
-          <div className="mb-4">
-            <button
-              type="button"
-              onClick={() => {
-                const arr = currentDevOtp.split('').slice(0, 6);
-                setDigits(arr);
-                verifyCode(currentDevOtp);
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/15 border border-amber-300/40 text-amber-200 text-xs font-mono hover:bg-amber-400/25 transition-all cursor-pointer shadow-md"
-            >
-              <span>🔑 Test OTP: <strong className="tracking-widest text-white">{currentDevOtp}</strong></span>
-              <span className="text-[10px] text-amber-300/70 uppercase">(Click to auto-fill)</span>
-            </button>
-          </div>
-        )}
 
         {/* 6-Digit OTP Inputs */}
         <div className="my-7 flex justify-center items-center gap-2 sm:gap-3">
