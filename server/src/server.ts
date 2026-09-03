@@ -1,7 +1,7 @@
 import app from './app';
 import { seedDatabase } from './seed';
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 async function start() {
   try {
