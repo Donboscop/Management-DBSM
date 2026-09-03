@@ -40,6 +40,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
+  loginPassword: (email: string, password: string, role: 'ADMIN' | 'STUDENT') =>
+    request<{ success: boolean; token: string; user: any }>('/auth/login-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, role }),
+    }),
+
   requestOtp: (email: string, role: 'ADMIN' | 'STUDENT') =>
     request<{ success: boolean; message: string; cooldownSeconds: number; expiresAt: string }>(
       '/auth/request-otp',
@@ -53,6 +59,12 @@ export const api = {
     request<{ success: boolean; token: string; user: any }>('/auth/verify-otp', {
       method: 'POST',
       body: JSON.stringify({ email, otp, role }),
+    }),
+
+  setPassword: (data: { email: string; newPassword: string; currentPassword?: string; otp?: string }) =>
+    request<{ success: boolean; message: string }>('/auth/set-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
   getCurrentUser: () => request<any>('/auth/me'),

@@ -7,11 +7,15 @@ A premium, cinematic full-stack Academy Management and Timetable Scheduling Suit
 
 ## 🌟 Key Features
 
-### 1. 🔐 Cinematic Passwordless Authentication
+### 1. 🔐 Dual Authentication (Password Primary + Email OTP Fallback)
 - **Dual Portals**: Dedicated **Administrator** and **Student** gateways.
-- **Secure Email + 6-Digit OTP**: Passwordless flow with HMAC-SHA256 hashed verification and 5-minute expiration.
-- **Live Email Dispatch**: Integrated with Gmail SMTP (Nodemailer) and Resend API for instant code delivery.
-- **Strict Role Authorization**: Only pre-registered emails authorized by an administrator can request access codes.
+- **Primary Password Sign-in**: Secure PBKDF2 salt-hashed password authentication for fast daily access.
+- **"Forgot Password? Sign in with OTP"**: 6-digit email OTP verification sent directly to Gmail for forgotten passwords or passwordless access.
+- **Default Initial Passwords**:
+  - Administrator: `Admin@123`
+  - Students: `Student@123`
+- **Live Email Dispatch**: Integrated with Gmail SMTP (Nodemailer) and Resend API for instant verification code delivery.
+- **Strict Role Authorization**: Only pre-registered emails authorized by an administrator can access the portal.
 
 ### 2. 📊 Master Executive Admin Dashboard
 - **Live Statistics**: Real-time counts and percentages for Total Students, Hostellers, Day Scholars, Active Languages, Male, and Female demographics.

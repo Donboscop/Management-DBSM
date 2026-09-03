@@ -1,9 +1,13 @@
 import { PrismaClient } from '@prisma/client';
+import { hashPassword } from './utils/crypto';
 
 const prisma = new PrismaClient();
 
 export async function seedDatabase() {
   console.log('🌱 Checking / Seeding database...');
+
+  const adminPassword = hashPassword('Admin@123');
+  const studentPassword = hashPassword('Student@123');
 
   // 1. Seed Languages
   const languagesList = ['Tamil', 'Kannada', 'Telugu', 'Malayalam', 'Hindi', 'Bengali', 'English', 'Not Specified'];
@@ -20,10 +24,11 @@ export async function seedDatabase() {
   // 2. Seed Authorized Admin User
   await prisma.user.upsert({
     where: { email: 'admin@donbosco.edu' },
-    update: { isActive: true },
+    update: { isActive: true, password: adminPassword },
     create: {
       email: 'admin@donbosco.edu',
       role: 'ADMIN',
+      password: adminPassword,
       isActive: true,
       emailVerified: true,
     },
@@ -31,10 +36,11 @@ export async function seedDatabase() {
 
   await prisma.user.upsert({
     where: { email: 'director@donbosco.edu' },
-    update: { isActive: true },
+    update: { isActive: true, password: adminPassword },
     create: {
       email: 'director@donbosco.edu',
       role: 'ADMIN',
+      password: adminPassword,
       isActive: true,
       emailVerified: true,
     },
@@ -42,10 +48,11 @@ export async function seedDatabase() {
 
   await prisma.user.upsert({
     where: { email: 'donboscop24@gmail.com' },
-    update: { isActive: true, role: 'ADMIN' },
+    update: { isActive: true, role: 'ADMIN', password: adminPassword },
     create: {
       email: 'donboscop24@gmail.com',
       role: 'ADMIN',
+      password: adminPassword,
       isActive: true,
       emailVerified: true,
     },
@@ -131,10 +138,11 @@ export async function seedDatabase() {
     // Ensure corresponding Student User account is authorized
     await prisma.user.upsert({
       where: { email: s.email },
-      update: { studentId: student.id, isActive: true },
+      update: { studentId: student.id, isActive: true, password: studentPassword },
       create: {
         email: s.email,
         role: 'STUDENT',
+        password: studentPassword,
         isActive: true,
         emailVerified: true,
         studentId: student.id,

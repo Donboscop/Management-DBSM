@@ -12,10 +12,18 @@ export function hashOtp(otp: string, email: string): string {
     .digest('hex');
 }
 
-export function verifyOtpHash(otp: string, email: string, hash: string): boolean {
-  const calculated = hashOtp(otp, email);
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, storedHash: string): boolean {
+  if (!storedHash || !storedHash.includes(':')) return false;
+  const [salt, key] = storedHash.split(':');
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
   try {
-    return crypto.timingSafeEqual(Buffer.from(calculated), Buffer.from(hash));
+    return crypto.timingSafeEqual(Buffer.from(key), Buffer.from(hash));
   } catch {
     return false;
   }

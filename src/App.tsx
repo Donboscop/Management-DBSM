@@ -61,6 +61,7 @@ const AppContent: React.FC = () => {
           role={selectedRole}
           onBack={() => setStep('PORTAL_SELECT')}
           onOtpRequested={handleOtpRequested}
+          onSuccess={handleAuthSuccess}
         />
       )}
 
