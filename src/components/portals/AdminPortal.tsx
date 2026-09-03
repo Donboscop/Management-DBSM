@@ -58,6 +58,9 @@ export const AdminPortal: React.FC = () => {
   const [reviewDecision, setReviewDecision] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [isUpdatingLeave, setIsUpdatingLeave] = useState(false);
+  // Dropdown States
+  const [isNavDutiesOpen, setIsNavDutiesOpen] = useState(false);
+  const [isHeroDutiesOpen, setIsHeroDutiesOpen] = useState(false);
   // Students Data
   const [students, setStudents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -651,35 +654,59 @@ export const AdminPortal: React.FC = () => {
           </button>
 
           {/* Duties Dropdown */}
-          <div className="relative group/navduties">
+          <div className="relative">
             <button
-              className={`flex items-center gap-1 transition-colors cursor-pointer ${
-                ['duties', 'responsibilities'].includes(activeTab) ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+              onClick={() => setIsNavDutiesOpen(!isNavDutiesOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                ['duties', 'responsibilities'].includes(activeTab) || isNavDutiesOpen
+                  ? 'text-white font-semibold bg-white/10'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
               }`}
             >
               <span>Duties</span>
-              <span className="text-[9px]">▼</span>
+              <span className={`text-[9px] transition-transform duration-200 ${isNavDutiesOpen ? 'rotate-180' : ''}`}>▼</span>
             </button>
-            <div className="absolute top-full left-0 mt-2 w-52 py-2 rounded-2xl glass-panel shadow-2xl border border-white/15 opacity-0 pointer-events-none group-hover/navduties:opacity-100 group-hover/navduties:pointer-events-auto transition-all duration-200 backdrop-blur-2xl">
-              <button
-                onClick={() => setActiveTab('duties')}
-                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+
+            {isNavDutiesOpen && (
+              <div
+                className="absolute top-full left-0 mt-2 w-56 py-2.5 rounded-2xl glass-panel shadow-2xl border border-white/20 backdrop-blur-2xl z-50 animate-fadeIn"
+                onMouseLeave={() => setIsNavDutiesOpen(false)}
               >
-                Morning Job
-              </button>
-              <button
-                onClick={() => setActiveTab('duties')}
-                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                House Cleaning
-              </button>
-              <button
-                onClick={() => setActiveTab('responsibilities')}
-                className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                Special Responsibilities
-              </button>
-            </div>
+                <div className="px-3.5 py-1 text-[10px] uppercase font-mono tracking-wider text-amber-300/80 border-b border-white/10 mb-1.5">
+                  Institutional Duties
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveTab('duties');
+                    setIsNavDutiesOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-white/90 hover:text-white hover:bg-white/15 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span>Morning Job</span>
+                  <span className="text-[10px] text-white/40">Daily</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('duties');
+                    setIsNavDutiesOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-white/90 hover:text-white hover:bg-white/15 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span>House Cleaning</span>
+                  <span className="text-[10px] text-white/40">Rotational</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('responsibilities');
+                    setIsNavDutiesOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-white/90 hover:text-white hover:bg-white/15 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span>Special Responsibilities</span>
+                  <span className="text-[10px] text-amber-300/70">Key Roles</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -849,34 +876,49 @@ export const AdminPortal: React.FC = () => {
                   )}
                 </button>
 
-                <div className="relative group/heroduties">
+                <div className="relative">
                   <button
+                    onClick={() => setIsHeroDutiesOpen(!isHeroDutiesOpen)}
                     className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-1.5 transition-all border border-white/15 backdrop-blur-md cursor-pointer"
                   >
                     <Calendar className="w-4 h-4" />
                     <span>Duties</span>
-                    <span className="text-[9px]">▼</span>
+                    <span className={`text-[9px] transition-transform duration-200 ${isHeroDutiesOpen ? 'rotate-180' : ''}`}>▼</span>
                   </button>
-                  <div className="absolute top-full left-0 mt-2 w-48 py-2 rounded-2xl glass-panel shadow-2xl border border-white/15 opacity-0 pointer-events-none group-hover/heroduties:opacity-100 group-hover/heroduties:pointer-events-auto transition-all duration-200 backdrop-blur-2xl z-20">
-                    <button
-                      onClick={() => setActiveTab('duties')}
-                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                  {isHeroDutiesOpen && (
+                    <div
+                      className="absolute top-full left-0 mt-2 w-56 py-2.5 rounded-2xl glass-panel shadow-2xl border border-white/20 backdrop-blur-2xl z-50 animate-fadeIn"
+                      onMouseLeave={() => setIsHeroDutiesOpen(false)}
                     >
-                      Morning Job
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('duties')}
-                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                      House Cleaning
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('responsibilities')}
-                      className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                      Special Responsibilities
-                    </button>
-                  </div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('duties');
+                          setIsHeroDutiesOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                      >
+                        Morning Job
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('duties');
+                          setIsHeroDutiesOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                      >
+                        House Cleaning
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('responsibilities');
+                          setIsHeroDutiesOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                      >
+                        Special Responsibilities
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <button
