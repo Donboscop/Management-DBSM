@@ -283,4 +283,49 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ status, adminRemarks }),
     }),
+
+  // Mass Reading & Liturgical Ministry (Admin)
+  getLiturgy: (params?: { startDate?: string; days?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.days) query.set('days', params.days.toString());
+    return request<{
+      success: boolean;
+      poolStats: {
+        totalEligible: number;
+        cycleLengthDays: number;
+        daysSpan: number;
+        startDate: string;
+        endDate: string;
+      };
+      eligibleStudents: any[];
+      schedule: {
+        date: string;
+        dayName: string;
+        fullDayName: string;
+        isSunday: boolean;
+        liturgicalType: string;
+        requiredRolesCount: number;
+        assignments: any[];
+      }[];
+    }>(`/admin/liturgy?${query.toString()}`);
+  },
+
+  generateLiturgy: (data?: { startDate?: string; days?: number; includeFaithfulPrayers?: boolean }) =>
+    request<{ success: boolean; message: string; count: number; daysGenerated: number }>('/admin/liturgy/generate', {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+
+  swapLiturgy: (data: { assignmentAId: string; assignmentBId: string }) =>
+    request<{ success: boolean; message: string }>('/admin/liturgy/swap', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  overrideLiturgy: (data: { assignmentId?: string; newStudentId?: string; date?: string; title?: string }) =>
+    request<{ success: boolean; assignment: any }>('/admin/liturgy/override', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

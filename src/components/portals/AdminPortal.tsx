@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Sun,
   Brush,
-  BookOpen,
   Sparkles,
   Briefcase,
   Clock,
@@ -39,12 +38,13 @@ import { api } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { NoticeBoardPosterModal, type PosterGroupItem } from '../posters/NoticeBoardPosterModal';
+import { LiturgyManagementView } from '../liturgy/LiturgyManagementView';
 
 export const AdminPortal: React.FC = () => {
   const { logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'notices' | 'logs' | 'leaves'
+    'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'liturgy' | 'notices' | 'logs' | 'leaves'
   >('dashboard');
 
   // Notice Board Poster Modal State
@@ -861,9 +861,31 @@ export const AdminPortal: React.FC = () => {
                   <span>Special Responsibilities</span>
                   <span className="text-[10px] text-amber-300/70">Key Roles</span>
                 </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('liturgy');
+                    setIsNavDutiesOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-white/90 hover:text-white hover:bg-white/15 flex items-center justify-between transition-colors cursor-pointer border-t border-white/5"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>✝️</span>
+                    <span>Mass Reading</span>
+                  </span>
+                  <span className="text-[10px] text-amber-300">Chapel</span>
+                </button>
               </div>
             )}
           </div>
+
+          <button
+            onClick={() => setActiveTab('liturgy')}
+            className={`transition-colors cursor-pointer flex items-center gap-1 ${
+              activeTab === 'liturgy' ? 'text-white font-semibold' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            <span>✝️ Mass Reading</span>
+          </button>
 
           <button
             onClick={() => setActiveTab('leaves')}
@@ -953,6 +975,7 @@ export const AdminPortal: React.FC = () => {
               { id: 'refectory', label: 'Refectory', icon: <Utensils className="w-3.5 h-3.5 mr-1" /> },
               { id: 'duties', label: 'Daily Duties', icon: <Calendar className="w-3.5 h-3.5 mr-1" /> },
               { id: 'responsibilities', label: 'Special Roles', icon: <Layers className="w-3.5 h-3.5 mr-1" /> },
+              { id: 'liturgy', label: 'Mass Reading ✝️', icon: <span className="mr-1">✝️</span> },
               { id: 'leaves', label: 'Leaves', icon: <FileText className="w-3.5 h-3.5 mr-1" /> },
               { id: 'notices', label: 'Notices & Posters', icon: <Bell className="w-3.5 h-3.5 mr-1" /> },
               { id: 'logs', label: 'Audit Logs', icon: <ShieldAlert className="w-3.5 h-3.5 mr-1" /> },
@@ -1020,6 +1043,14 @@ export const AdminPortal: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('liturgy')}
+                  className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all border border-amber-400/30 text-amber-200 backdrop-blur-md cursor-pointer"
+                >
+                  <span>✝️</span>
+                  <span>Mass Reading</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('leaves')}
                   className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium tracking-wider uppercase flex items-center gap-2 transition-all border border-white/15 backdrop-blur-md cursor-pointer relative"
                 >
@@ -1072,6 +1103,15 @@ export const AdminPortal: React.FC = () => {
                         className="w-full text-left px-4 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 transition-colors"
                       >
                         Special Responsibilities
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('liturgy');
+                          setIsHeroDutiesOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-amber-300 hover:text-amber-200 hover:bg-white/10 transition-colors border-t border-white/10"
+                      >
+                        Mass Reading (Chapel)
                       </button>
                     </div>
                   )}
@@ -1233,7 +1273,7 @@ export const AdminPortal: React.FC = () => {
                       { name: 'Dormitory Allocation', icon: <Home className="w-4 h-4 text-purple-300" />, tab: 'dormitory' },
                       { name: 'Special Responsibilities', icon: <Briefcase className="w-4 h-4 text-rose-300" />, tab: 'responsibilities' },
                       { name: 'Refectory Seating', icon: <Utensils className="w-4 h-4 text-orange-300" />, tab: 'refectory' },
-                      { name: 'Mass Reading', icon: <BookOpen className="w-4 h-4 text-blue-300" />, tab: 'duties' },
+                      { name: 'Mass Reading (Chapel)', icon: <span className="text-xs">✝️</span>, tab: 'liturgy' },
                     ].map((m) => (
                       <button
                         key={m.name}
@@ -1837,6 +1877,11 @@ export const AdminPortal: React.FC = () => {
         )}
 
         {/* ======================================================== */}
+        {/* 7.5. MASS READING & LITURGICAL MINISTRY                  */}
+        {/* ======================================================== */}
+        {activeTab === 'liturgy' && <LiturgyManagementView />}
+
+        {/* ======================================================== */}
         {/* 8. NOTICES & POSTERS VIEW                                */}
         {/* ======================================================== */}
         {activeTab === 'notices' && (
@@ -1862,8 +1907,8 @@ export const AdminPortal: React.FC = () => {
                 </div>
               </div>
 
-              {/* 4 Poster Category Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 5 Poster Category Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 {/* 1. Dormitory Poster */}
                 <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
                   <div>
@@ -1973,6 +2018,35 @@ export const AdminPortal: React.FC = () => {
                     variant="primary"
                     size="sm"
                     onClick={openDutiesPoster}
+                    className="w-full mt-4 gap-1.5 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>View & Export Poster</span>
+                  </Button>
+                </div>
+
+                {/* 5. Sacred Chapel Liturgy Poster */}
+                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300">
+                        ✝️
+                      </span>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        Chapel
+                      </span>
+                    </div>
+                    <h3 className="font-heading text-base font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Mass Reading Roster
+                    </h3>
+                    <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                      Sacred Heart Chapel Mass lectors with Sunday 3-readings support.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setActiveTab('liturgy')}
                     className="w-full mt-4 gap-1.5 text-xs"
                   >
                     <Printer className="w-3.5 h-3.5" />

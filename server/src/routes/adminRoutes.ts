@@ -1625,4 +1625,326 @@ router.put('/leaves/:id/status', async (req: AuthenticatedRequest, res: Response
   }
 });
 
+// ==========================================
+// 11. MASS READING & LITURGICAL MINISTRY
+// ==========================================
+
+// Get Liturgical Roster and Pool Analytics
+router.get('/liturgy', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const daysCount = parseInt(req.query.days as string) || 7;
+    const startDateStr = (req.query.startDate as string) || new Date().toISOString().split('T')[0];
+
+    const startDate = new Date(startDateStr);
+    const dateList: string[] = [];
+    for (let i = 0; i < daysCount; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      dateList.push(d.toISOString().split('T')[0]);
+    }
+
+    // 1. Fetch eligible Christian Hosteller pool
+    const christianHostellers = await prisma.student.findMany({
+      where: {
+        isActive: true,
+        dayScholar: false,
+        religion: { in: ['Christian', 'Catholic', 'christian', 'catholic'] },
+      },
+      include: { language: true },
+      orderBy: { name: 'asc' },
+    });
+
+    // 2. Fetch existing Mass Reading duty assignments for the date list
+    const assignments = await prisma.dutyAssignment.findMany({
+      where: {
+        dutyType: 'MASS_READING',
+        date: { in: dateList },
+      },
+      include: {
+        student: {
+          include: { language: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // 3. Group assignments by date
+    const scheduleByDate = dateList.map((date) => {
+      const dObj = new Date(date);
+      const isSunday = dObj.getDay() === 0;
+      const dayName = dObj.toLocaleDateString('en-US', { weekday: 'short' });
+      const fullDayName = dObj.toLocaleDateString('en-US', { weekday: 'long' });
+      const dayAssignments = assignments.filter((a) => a.date === date);
+
+      return {
+        date,
+        dayName,
+        fullDayName,
+        isSunday,
+        liturgicalType: isSunday ? 'SUNDAY_SOLEMNITY' : 'WEEKDAY_MASS',
+        requiredRolesCount: isSunday ? 3 : 2,
+        assignments: dayAssignments,
+      };
+    });
+
+    const poolCount = christianHostellers.length;
+    // Avg 2.2 readings per day (2 on weekdays, 3 on Sunday)
+    const estimatedCycleLength = poolCount > 0 ? Math.ceil(poolCount / 2.2) : 0;
+
+    res.status(200).json({
+      success: true,
+      poolStats: {
+        totalEligible: poolCount,
+        cycleLengthDays: estimatedCycleLength,
+        daysSpan: daysCount,
+        startDate: dateList[0],
+        endDate: dateList[dateList.length - 1],
+      },
+      eligibleStudents: christianHostellers,
+      schedule: scheduleByDate,
+    });
+  } catch (error) {
+    console.error('Fetch liturgy error:', error);
+    res.status(500).json({ error: 'Failed to fetch liturgical roster' });
+  }
+});
+
+// Generate Mass Reading Roster using Pop-Bucket Rotation Engine
+router.post('/liturgy/generate', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const {
+      startDate: rawStartDate,
+      days = 7,
+      includeFaithfulPrayers = false,
+    } = req.body;
+
+    const startDateStr = rawStartDate || new Date().toISOString().split('T')[0];
+    const startDate = new Date(startDateStr);
+    const dateList: string[] = [];
+    for (let i = 0; i < Math.min(60, Math.max(1, parseInt(days) || 7)); i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      dateList.push(d.toISOString().split('T')[0]);
+    }
+
+    // 1. Fetch eligible Christian Hosteller Pool
+    const eligiblePool = await prisma.student.findMany({
+      where: {
+        isActive: true,
+        dayScholar: false,
+        religion: { in: ['Christian', 'Catholic', 'christian', 'catholic'] },
+      },
+    });
+
+    if (eligiblePool.length === 0) {
+      res.status(400).json({
+        error: 'No active Christian hostellers found in the academy. Please verify student religion and residency records.',
+      });
+      return;
+    }
+
+    // 2. Fetch approved leaves during the period to avoid scheduling absent students
+    const approvedLeaves = await prisma.leaveRequest.findMany({
+      where: {
+        status: 'APPROVED',
+        startDate: { lte: dateList[dateList.length - 1] },
+        endDate: { gte: dateList[0] },
+      },
+    });
+
+    const isStudentOnLeave = (studentId: string, targetDate: string) => {
+      return approvedLeaves.some(
+        (leave) => leave.studentId === studentId && targetDate >= leave.startDate && targetDate <= leave.endDate
+      );
+    };
+
+    // 3. Clear existing Mass Reading assignments for these dates
+    await prisma.dutyAssignment.deleteMany({
+      where: {
+        dutyType: 'MASS_READING',
+        date: { in: dateList },
+      },
+    });
+
+    // 4. Smart Pop-Bucket Draw Engine
+    const shuffleArray = <T>(array: T[]): T[] => {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    let bucket = shuffleArray(eligiblePool);
+    const newAssignments: any[] = [];
+
+    for (const date of dateList) {
+      const dObj = new Date(date);
+      const isSunday = dObj.getDay() === 0;
+
+      // Define Liturgical Roles for this day
+      const roles: string[] = [];
+      if (isSunday) {
+        roles.push('First Reading (Lectio Prima)');
+        roles.push('Responsorial Psalm (Psalmus Responsorius)');
+        roles.push('Second Reading (Lectio Secunda)');
+      } else {
+        roles.push('First Reading (Lectio Prima)');
+        roles.push('Responsorial Psalm (Psalmus Responsorius)');
+      }
+
+      if (includeFaithfulPrayers) {
+        roles.push('Prayers of the Faithful (Universal Prayer)');
+      }
+
+      const assignedTodayIds = new Set<string>();
+
+      for (const roleTitle of roles) {
+        // Find a candidate from bucket who is not on leave and not assigned today
+        let candidateIndex = bucket.findIndex(
+          (s) => !assignedTodayIds.has(s.id) && !isStudentOnLeave(s.id, date)
+        );
+
+        // If bucket doesn't have an available candidate, refill & reshuffle
+        if (candidateIndex === -1) {
+          bucket = shuffleArray(eligiblePool);
+          candidateIndex = bucket.findIndex(
+            (s) => !assignedTodayIds.has(s.id) && !isStudentOnLeave(s.id, date)
+          );
+        }
+
+        let selectedStudent = null;
+        if (candidateIndex !== -1) {
+          selectedStudent = bucket.splice(candidateIndex, 1)[0];
+        } else {
+          // Fallback: pick any eligible student not assigned today
+          selectedStudent = eligiblePool.find((s) => !assignedTodayIds.has(s.id)) || eligiblePool[0];
+        }
+
+        assignedTodayIds.add(selectedStudent.id);
+
+        newAssignments.push({
+          dutyType: 'MASS_READING',
+          title: roleTitle,
+          date,
+          studentId: selectedStudent.id,
+          isManualOverride: false,
+          notes: isSunday ? 'Sunday Solemnity Mass' : 'Weekday Morning Mass (6:30 AM)',
+        });
+      }
+    }
+
+    // Save generated assignments to database
+    for (const item of newAssignments) {
+      await prisma.dutyAssignment.create({ data: item });
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'GENERATE_LITURGY_ROSTER',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Generated ${newAssignments.length} Mass Reading assignments across ${dateList.length} days using Pop-Bucket Engine`,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Generated ${newAssignments.length} liturgical ministry assignments across ${dateList.length} days.`,
+      count: newAssignments.length,
+      daysGenerated: dateList.length,
+    });
+  } catch (error) {
+    console.error('Generate liturgy roster error:', error);
+    res.status(500).json({ error: 'Failed to generate liturgical roster' });
+  }
+});
+
+// Swap Two Lector Assignments (Zero-Duplication)
+router.post('/liturgy/swap', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { assignmentAId, assignmentBId } = req.body;
+    if (!assignmentAId || !assignmentBId) {
+      res.status(400).json({ error: 'assignmentAId and assignmentBId are required' });
+      return;
+    }
+
+    const assignA = await prisma.dutyAssignment.findUnique({ where: { id: assignmentAId } });
+    const assignB = await prisma.dutyAssignment.findUnique({ where: { id: assignmentBId } });
+
+    if (!assignA || !assignB) {
+      res.status(404).json({ error: 'One or both liturgical assignments not found' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.dutyAssignment.update({
+        where: { id: assignmentAId },
+        data: { studentId: assignB.studentId, isManualOverride: true },
+      }),
+      prisma.dutyAssignment.update({
+        where: { id: assignmentBId },
+        data: { studentId: assignA.studentId, isManualOverride: true },
+      }),
+    ]);
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'LITURGY_SWAP',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Swapped liturgical roles between student ${assignA.studentId} (${assignA.date}) and student ${assignB.studentId} (${assignB.date})`,
+      },
+    });
+
+    res.status(200).json({ success: true, message: 'Lector assignments swapped successfully with zero duplication.' });
+  } catch (error) {
+    console.error('Liturgy swap error:', error);
+    res.status(500).json({ error: 'Failed to swap liturgical assignments' });
+  }
+});
+
+// Manual Re-assignment / Override for a Specific Lector Slot
+router.post('/liturgy/override', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { assignmentId, newStudentId, date, title } = req.body;
+
+    if (assignmentId) {
+      const updated = await prisma.dutyAssignment.update({
+        where: { id: assignmentId },
+        data: {
+          studentId: newStudentId,
+          isManualOverride: true,
+        },
+        include: { student: true },
+      });
+      res.status(200).json({ success: true, assignment: updated });
+      return;
+    }
+
+    if (!newStudentId || !date || !title) {
+      res.status(400).json({ error: 'assignmentId or (newStudentId, date, title) required' });
+      return;
+    }
+
+    const created = await prisma.dutyAssignment.create({
+      data: {
+        dutyType: 'MASS_READING',
+        title,
+        date,
+        studentId: newStudentId,
+        isManualOverride: true,
+      },
+      include: { student: true },
+    });
+
+    res.status(200).json({ success: true, assignment: created });
+  } catch (error) {
+    console.error('Liturgy override error:', error);
+    res.status(500).json({ error: 'Failed to reassign liturgical role' });
+  }
+});
+
 export default router;
+
