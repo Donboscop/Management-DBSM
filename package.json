@@ -8,11 +8,13 @@
     "server": "tsx watch server/src/server.ts",
     "client": "vite",
     "build": "tsc -b && vite build",
+    "postinstall": "prisma generate",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3",
     "autoprefixer": "^10.5.4",
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
