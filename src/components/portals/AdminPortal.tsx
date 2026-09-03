@@ -30,11 +30,15 @@ import {
   CalendarDays,
   Check,
   X,
+  Printer,
+  Crown,
+  Star,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { NoticeBoardPosterModal, type PosterGroupItem } from '../posters/NoticeBoardPosterModal';
 
 export const AdminPortal: React.FC = () => {
   const { logout } = useAuth();
@@ -42,6 +46,21 @@ export const AdminPortal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'students' | 'languages' | 'dormitory' | 'refectory' | 'duties' | 'responsibilities' | 'notices' | 'logs' | 'leaves'
   >('dashboard');
+
+  // Notice Board Poster Modal State
+  const [posterConfig, setPosterConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle?: string;
+    moduleType: 'dormitory' | 'refectory' | 'responsibilities' | 'duties';
+    effectivePeriod?: string;
+    groups: PosterGroupItem[];
+  }>({
+    isOpen: false,
+    title: '',
+    moduleType: 'dormitory',
+    groups: [],
+  });
 
   // Dashboard Data
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -590,6 +609,143 @@ export const AdminPortal: React.FC = () => {
     } catch (err: any) {
       showToast(err.message, true);
     }
+  };
+
+  // 11. Notice Board Poster Openers
+  const openDormitoryPoster = () => {
+    const groups: PosterGroupItem[] = dormRooms.map((room) => ({
+      id: room.id,
+      name: room.name,
+      capacity: room.capacity,
+      gender: room.gender,
+      students: (room.allocations || []).map((a: any) => ({
+        id: a.student?.id || a.studentId,
+        name: a.student?.name || 'Student',
+        studentId: a.student?.studentId,
+        batch: a.student?.batch,
+        language: a.student?.language?.name,
+        gender: a.student?.gender,
+      })),
+    }));
+
+    setPosterConfig({
+      isOpen: true,
+      title: 'DORMITORY ALLOCATION ROSTER',
+      subtitle: 'Language-Balanced Residential Halls Allocation • Official Room Placements',
+      moduleType: 'dormitory',
+      effectivePeriod: 'Term 1 - 2026 (Valid for Current Session)',
+      groups,
+    });
+  };
+
+  const openRefectoryPoster = () => {
+    const groups: PosterGroupItem[] = refectoryTables.map((table) => ({
+      id: table.id,
+      name: table.name,
+      capacity: table.capacity,
+      genderRule: table.genderRule,
+      students: (table.allocations || []).map((a: any) => ({
+        id: a.student?.id || a.studentId,
+        name: a.student?.name || 'Student',
+        studentId: a.student?.studentId,
+        batch: a.student?.batch,
+        language: a.student?.language?.name,
+      })),
+    }));
+
+    setPosterConfig({
+      isOpen: true,
+      title: 'REFECTORY DINING ALLOCATION ROSTER',
+      subtitle: 'Language-Balanced Community Dining Table Assignments',
+      moduleType: 'refectory',
+      effectivePeriod: 'Term 1 - 2026 (Valid for Current Session)',
+      groups,
+    });
+  };
+
+  const openResponsibilitiesPoster = () => {
+    const groups: PosterGroupItem[] = responsibilities.map((r) => {
+      const matchedDuties = duties.filter((d) => d.dutyType === 'SPECIAL_RESPONSIBILITY' && d.title === r.title);
+      const assignedStudents = matchedDuties.length > 0
+        ? matchedDuties.map((d) => ({
+            id: d.student?.id || d.studentId,
+            name: d.student?.name || 'Student',
+            studentId: d.student?.studentId,
+            batch: d.student?.batch,
+            language: d.student?.language?.name,
+          }))
+        : students.slice(0, r.requiredCount || 2).map((s) => ({
+            id: s.id,
+            name: s.name,
+            studentId: s.studentId,
+            batch: s.batch,
+            language: s.language?.name,
+          }));
+
+      return {
+        id: r.id,
+        name: r.title,
+        capacity: r.requiredCount || 2,
+        genderRule: r.genderRule,
+        students: assignedStudents,
+      };
+    });
+
+    setPosterConfig({
+      isOpen: true,
+      title: 'SPECIAL RESPONSIBILITIES ROSTER',
+      subtitle: 'Fixed Term Institutional Responsibility Assignments',
+      moduleType: 'responsibilities',
+      effectivePeriod: 'Weekly Rotation (Valid for 7 Days)',
+      groups,
+    });
+  };
+
+  const openDutiesPoster = () => {
+    const dutyMap: Record<string, any[]> = {};
+    duties.forEach((d) => {
+      const typeKey = d.dutyType || 'DAILY_DUTY';
+      if (!dutyMap[typeKey]) dutyMap[typeKey] = [];
+      dutyMap[typeKey].push(d);
+    });
+
+    let groups: PosterGroupItem[] = Object.entries(dutyMap).map(([typeKey, dList]) => ({
+      id: typeKey,
+      name: typeKey.replace(/_/g, ' '),
+      capacity: dList.length,
+      students: dList.map((d) => ({
+        id: d.student?.id || d.studentId,
+        name: `${d.title}: ${d.student?.name || 'Unassigned'}`,
+        studentId: d.student?.studentId,
+        batch: d.student?.batch,
+      })),
+    }));
+
+    if (groups.length === 0) {
+      groups = [
+        {
+          id: 'morning_job',
+          name: 'MORNING JOBS',
+          capacity: 4,
+          students: students.slice(0, 4).map((s) => ({ id: s.id, name: s.name, batch: s.batch })),
+        },
+        {
+          id: 'house_cleaning',
+          name: 'HOUSE CLEANING',
+          capacity: 4,
+          students: students.slice(4, 8).map((s) => ({ id: s.id, name: s.name, batch: s.batch })),
+        },
+      ];
+    }
+
+    setPosterConfig({
+      isOpen: true,
+      title: 'DAILY ROTATIONAL DUTIES ROSTER',
+      subtitle: 'Fair Rotational Morning Jobs, Cleaning & Assembly Schedule',
+      moduleType: 'duties',
+      effectivePeriod: new Date().toISOString().split('T')[0],
+      groups,
+    });
   };
 
   return (
@@ -1346,7 +1502,15 @@ export const AdminPortal: React.FC = () => {
                   Allocations strictly respect gender segregation, room capacity, and soft language diversity.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openDormitoryPoster}
+                  icon={<Printer className="w-3.5 h-3.5 text-amber-300" />}
+                >
+                  Notice Board Poster
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -1387,16 +1551,37 @@ export const AdminPortal: React.FC = () => {
                     </button>
                   </div>
                   <div className="space-y-2 mt-4">
-                    {room.allocations?.map((a: any) => (
+                    {room.allocations?.map((a: any, aIdx: number) => (
                       <div
                         key={a.id}
-                        className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between text-xs"
+                        className={`p-3 rounded-xl flex items-center justify-between text-xs border ${
+                          aIdx === 0
+                            ? 'bg-amber-400/10 border-amber-400/30'
+                            : aIdx === 1
+                            ? 'bg-indigo-500/10 border-indigo-400/30'
+                            : 'bg-white/5 border-white/5'
+                        }`}
                       >
-                        <div>
-                          <span className="font-medium text-white">{a.student.name}</span>
-                          <span className="text-white/40 ml-2 font-mono text-[10px]">
-                            {a.student.studentId}
-                          </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/40 font-mono text-[10px] w-4">{aIdx + 1}.</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white">{a.student.name}</span>
+                              {aIdx === 0 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-400 text-black font-bold text-[9px] uppercase">
+                                  <Crown className="w-2.5 h-2.5" /> Leader
+                                </span>
+                              )}
+                              {aIdx === 1 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-indigo-500 text-white font-bold text-[9px] uppercase">
+                                  <Star className="w-2.5 h-2.5" /> Asst. Leader
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-white/40 font-mono text-[10px]">
+                              {a.student.studentId} • {a.student.batch || 'Batch 2026'}
+                            </span>
+                          </div>
                         </div>
                         <span className="text-[10px] text-amber-300 font-medium">
                           {a.student.language?.name || 'Not Specified'}
@@ -1430,7 +1615,15 @@ export const AdminPortal: React.FC = () => {
                   Allocations with soft language balancing to encourage camaraderie across linguistic backgrounds.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openRefectoryPoster}
+                  icon={<Printer className="w-3.5 h-3.5 text-amber-300" />}
+                >
+                  Notice Board Poster
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -1470,19 +1663,42 @@ export const AdminPortal: React.FC = () => {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {table.allocations?.map((a: any) => (
-                      <div
-                        key={a.id}
-                        className="p-3 rounded-xl bg-white/5 border border-white/5 text-xs flex flex-col justify-between"
-                      >
-                        <span className="text-[10px] text-white/40 font-mono">Seat #{a.seatNumber}</span>
-                        <span className="font-medium text-white truncate mt-0.5">{a.student.name}</span>
-                        <span className="text-[10px] text-amber-300 mt-1">
-                          {a.student.language?.name || 'Not Specified'}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-4">
+                    {table.allocations?.map((a: any, sIdx: number) => {
+                      const isLeader = sIdx === 0;
+                      const isAsstLeader = sIdx === 1;
+
+                      return (
+                        <div
+                          key={a.id}
+                          className={`p-3 rounded-xl border text-xs flex flex-col justify-between ${
+                            isLeader
+                              ? 'bg-amber-400/10 border-amber-400/30'
+                              : isAsstLeader
+                              ? 'bg-indigo-500/10 border-indigo-400/30'
+                              : 'bg-white/5 border-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] text-white/50 font-mono">Seat #{a.seatNumber}</span>
+                            {isLeader && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-400 text-black font-bold text-[9px] uppercase">
+                                <Crown className="w-2.5 h-2.5" /> Table Leader
+                              </span>
+                            )}
+                            {isAsstLeader && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-indigo-500 text-white font-bold text-[9px] uppercase">
+                                <Star className="w-2.5 h-2.5" /> Asst. Leader
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-medium text-white truncate">{a.student.name}</span>
+                          <span className="text-[10px] text-amber-300 mt-0.5">
+                            {a.student.language?.name || 'Not Specified'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -1500,22 +1716,32 @@ export const AdminPortal: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'duties' && (
           <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="font-heading text-2xl text-white">Daily Rotational Duties</h2>
                 <p className="text-xs text-white/50">
                   Morning Job, House Cleaning, Liturgy & Assembly (Fair rotation, same-day conflict-free).
                 </p>
               </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleGenerateDuties}
-                isLoading={isProcessing}
-                icon={<RefreshCw className="w-3.5 h-3.5" />}
-              >
-                Generate Today's Duties
-              </Button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openDutiesPoster}
+                  icon={<Printer className="w-3.5 h-3.5 text-amber-300" />}
+                >
+                  Notice Board Poster
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleGenerateDuties}
+                  isLoading={isProcessing}
+                  icon={<RefreshCw className="w-3.5 h-3.5" />}
+                >
+                  Generate Today's Duties
+                </Button>
+              </div>
             </div>
 
             <div className="p-6 rounded-3xl glass-panel overflow-x-auto">
@@ -1555,21 +1781,31 @@ export const AdminPortal: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'responsibilities' && (
           <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="font-heading text-2xl text-white">Configurable Special Responsibilities</h2>
                 <p className="text-xs text-white/50">
                   Add or edit institution duties (Bell Ringers, Sacristans, Water System, etc.)
                 </p>
               </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowAddRespModal(true)}
-                icon={<Plus className="w-3.5 h-3.5" />}
-              >
-                New Responsibility
-              </Button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openResponsibilitiesPoster}
+                  icon={<Printer className="w-3.5 h-3.5 text-amber-300" />}
+                >
+                  Notice Board Poster
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowAddRespModal(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  New Responsibility
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1601,14 +1837,156 @@ export const AdminPortal: React.FC = () => {
         )}
 
         {/* ======================================================== */}
-        {/* 8. NOTICES VIEW                                          */}
+        {/* 8. NOTICES & POSTERS VIEW                                */}
         {/* ======================================================== */}
         {activeTab === 'notices' && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-8 animate-fadeIn">
+            {/* OFFICIAL NOTICE BOARD POSTERS GALLERY */}
+            <div className="p-8 rounded-3xl glass-panel relative overflow-hidden border border-amber-400/20">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-6 mb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="p-1.5 rounded-lg bg-amber-400/10 text-amber-300 border border-amber-400/30">
+                      <Sparkles className="w-4 h-4" />
+                    </span>
+                    <span className="text-[10px] tracking-[0.2em] uppercase text-amber-300 font-mono font-semibold">
+                      Notice Board Publisher & Downloader
+                    </span>
+                  </div>
+                  <h2 className="font-heading text-2xl sm:text-3xl text-white tracking-tight">
+                    Official Notice Board Posters
+                  </h2>
+                  <p className="text-xs text-white/50 max-w-xl mt-1">
+                    Generate, edit, swap student placements, and download high-resolution institutional posters for campus notice boards.
+                  </p>
+                </div>
+              </div>
+
+              {/* 4 Poster Category Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Dormitory Poster */}
+                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 rounded-xl bg-amber-400/10 text-amber-300">
+                        <Home className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        {dormRooms.length} Halls
+                      </span>
+                    </div>
+                    <h3 className="font-heading text-base font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Dormitory Roster
+                    </h3>
+                    <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                      Residential halls allocation with Leader & Asst. Leader designations.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={openDormitoryPoster}
+                    className="w-full mt-4 gap-1.5 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>View & Export Poster</span>
+                  </Button>
+                </div>
+
+                {/* 2. Refectory Poster */}
+                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 rounded-xl bg-indigo-400/10 text-indigo-300">
+                        <Utensils className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        {refectoryTables.length} Tables
+                      </span>
+                    </div>
+                    <h3 className="font-heading text-base font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Refectory Roster
+                    </h3>
+                    <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                      Community dining tables with Table Leader & Asst. Leader designations.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={openRefectoryPoster}
+                    className="w-full mt-4 gap-1.5 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>View & Export Poster</span>
+                  </Button>
+                </div>
+
+                {/* 3. Special Responsibilities Poster */}
+                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 rounded-xl bg-emerald-400/10 text-emerald-300">
+                        <ShieldAlert className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        {responsibilities.length} Roles
+                      </span>
+                    </div>
+                    <h3 className="font-heading text-base font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Responsibilities Roster
+                    </h3>
+                    <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                      Fixed-term responsibilities (Bell Ringers, Sacristans, Water System, etc.)
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={openResponsibilitiesPoster}
+                    className="w-full mt-4 gap-1.5 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>View & Export Poster</span>
+                  </Button>
+                </div>
+
+                {/* 4. Daily Duties Poster */}
+                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-amber-400/40 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="p-2 rounded-xl bg-purple-400/10 text-purple-300">
+                        <Calendar className="w-5 h-5" />
+                      </span>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-white/60">
+                        Today
+                      </span>
+                    </div>
+                    <h3 className="font-heading text-base font-semibold text-white group-hover:text-amber-300 transition-colors">
+                      Daily Duties Roster
+                    </h3>
+                    <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                      Fair rotational Morning Jobs, House Cleaning, and Assembly tasks.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={openDutiesPoster}
+                    className="w-full mt-4 gap-1.5 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>View & Export Poster</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* CIRCULAR NOTICES SECTION */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-heading text-2xl text-white">Official Institutional Notices</h2>
-                <p className="text-xs text-white/50">Publish circulars to students or all users.</p>
+                <h2 className="font-heading text-2xl text-white">Campus Circulars & Broadcasts</h2>
+                <p className="text-xs text-white/50">Publish announcements and circulars to students or all campus users.</p>
               </div>
               <Button
                 variant="primary"
@@ -2455,6 +2833,23 @@ export const AdminPortal: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* MODAL: OFFICIAL NOTICE BOARD POSTER GENERATOR & SWAP     */}
+      {/* ======================================================== */}
+      <NoticeBoardPosterModal
+        isOpen={posterConfig.isOpen}
+        onClose={() => setPosterConfig((prev) => ({ ...prev, isOpen: false }))}
+        title={posterConfig.title}
+        subtitle={posterConfig.subtitle}
+        moduleType={posterConfig.moduleType}
+        effectivePeriod={posterConfig.effectivePeriod}
+        groups={posterConfig.groups}
+        onAllocationsSaved={() => {
+          showToast('Allocations synchronized across all academy portals.');
+          loadTabContent();
+        }}
+      />
     </div>
   );
 };

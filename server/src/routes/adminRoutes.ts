@@ -821,6 +821,91 @@ router.put('/dormitory/override', async (req: AuthenticatedRequest, res: Respons
   }
 });
 
+// Swap Two Students between Dormitory Rooms
+router.post('/dormitory/swap', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { studentAId, studentBId, roomAId, roomBId, term = 'Term 1 - 2026' } = req.body;
+    if (!studentAId || !studentBId || !roomAId || !roomBId) {
+      res.status(400).json({ error: 'studentAId, studentBId, roomAId, and roomBId are required' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.dormitoryAllocation.deleteMany({
+        where: { studentId: { in: [studentAId, studentBId] }, term },
+      }),
+      prisma.dormitoryAllocation.create({
+        data: { roomId: roomBId, studentId: studentAId, term, isManualOverride: true },
+      }),
+      prisma.dormitoryAllocation.create({
+        data: { roomId: roomAId, studentId: studentBId, term, isManualOverride: true },
+      }),
+    ]);
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'DORMITORY_SWAP',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Swapped student ${studentAId} (Room: ${roomAId}) with student ${studentBId} (Room: ${roomBId})`,
+      },
+    });
+
+    res.status(200).json({ success: true, message: 'Dormitory student allocations swapped successfully.' });
+  } catch (error) {
+    console.error('Dormitory swap error:', error);
+    res.status(500).json({ error: 'Failed to swap dormitory allocations' });
+  }
+});
+
+// Save Full Dormitory Allocations Matrix
+router.post('/dormitory/save-allocations', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { allocations, term = 'Term 1 - 2026' } = req.body;
+    if (!Array.isArray(allocations)) {
+      res.status(400).json({ error: 'allocations array required' });
+      return;
+    }
+
+    // Clear previous allocations for this term
+    await prisma.dormitoryAllocation.deleteMany({ where: { term } });
+
+    const createPayload: any[] = [];
+    for (const item of allocations) {
+      if (item.roomId && Array.isArray(item.studentIds)) {
+        for (const sId of item.studentIds) {
+          if (sId) {
+            createPayload.push({
+              roomId: item.roomId,
+              studentId: sId,
+              term,
+              isManualOverride: true,
+            });
+          }
+        }
+      }
+    }
+
+    for (const item of createPayload) {
+      await prisma.dormitoryAllocation.create({ data: item });
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'DORMITORY_MATRIX_SAVED',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Updated and saved full dormitory roster with ${createPayload.length} students (${term})`,
+      },
+    });
+
+    res.status(200).json({ success: true, message: `Successfully saved ${createPayload.length} dormitory allocations.` });
+  } catch (error) {
+    console.error('Save dormitory matrix error:', error);
+    res.status(500).json({ error: 'Failed to save dormitory allocations matrix' });
+  }
+});
+
 // Create Dormitory Room
 router.post('/dormitory/rooms', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -979,6 +1064,92 @@ router.post('/refectory/generate', async (req: AuthenticatedRequest, res: Respon
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate refectory schedule' });
+  }
+});
+
+// Swap Two Students between Refectory Tables
+router.post('/refectory/swap', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { studentAId, studentBId, tableAId, tableBId, seatA = 1, seatB = 1, term = 'Term 1 - 2026' } = req.body;
+    if (!studentAId || !studentBId || !tableAId || !tableBId) {
+      res.status(400).json({ error: 'studentAId, studentBId, tableAId, and tableBId are required' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.refectoryAllocation.deleteMany({
+        where: { studentId: { in: [studentAId, studentBId] }, term },
+      }),
+      prisma.refectoryAllocation.create({
+        data: { tableId: tableBId, studentId: studentAId, seatNumber: seatB, term, isManualOverride: true },
+      }),
+      prisma.refectoryAllocation.create({
+        data: { tableId: tableAId, studentId: studentBId, seatNumber: seatA, term, isManualOverride: true },
+      }),
+    ]);
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'REFECTORY_SWAP',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Swapped student ${studentAId} (Table: ${tableAId}) with student ${studentBId} (Table: ${tableBId})`,
+      },
+    });
+
+    res.status(200).json({ success: true, message: 'Refectory seating swapped successfully.' });
+  } catch (error) {
+    console.error('Refectory swap error:', error);
+    res.status(500).json({ error: 'Failed to swap refectory seats' });
+  }
+});
+
+// Save Full Refectory Allocations Matrix
+router.post('/refectory/save-allocations', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { allocations, term = 'Term 1 - 2026' } = req.body;
+    if (!Array.isArray(allocations)) {
+      res.status(400).json({ error: 'allocations array required' });
+      return;
+    }
+
+    // Clear previous allocations for this term
+    await prisma.refectoryAllocation.deleteMany({ where: { term } });
+
+    const createPayload: any[] = [];
+    for (const item of allocations) {
+      if (item.tableId && Array.isArray(item.studentIds)) {
+        item.studentIds.forEach((sId: string, idx: number) => {
+          if (sId) {
+            createPayload.push({
+              tableId: item.tableId,
+              studentId: sId,
+              seatNumber: idx + 1,
+              term,
+              isManualOverride: true,
+            });
+          }
+        });
+      }
+    }
+
+    for (const item of createPayload) {
+      await prisma.refectoryAllocation.create({ data: item });
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'REFECTORY_MATRIX_SAVED',
+        actorEmail: req.user?.email || 'admin',
+        actorRole: 'ADMIN',
+        details: `Updated and saved full refectory seating matrix with ${createPayload.length} students (${term})`,
+      },
+    });
+
+    res.status(200).json({ success: true, message: `Successfully saved ${createPayload.length} dining seat allocations.` });
+  } catch (error) {
+    console.error('Save refectory matrix error:', error);
+    res.status(500).json({ error: 'Failed to save refectory allocations matrix' });
   }
 });
 

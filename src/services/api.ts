@@ -167,6 +167,18 @@ export const api = {
       body: JSON.stringify({ term }),
     }),
 
+  swapDormitory: (data: { studentAId: string; studentBId: string; roomAId: string; roomBId: string; term?: string }) =>
+    request<{ success: boolean; message: string }>('/admin/dormitory/swap', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  saveDormitoryAllocations: (allocations: { roomId: string; studentIds: string[] }[], term?: string) =>
+    request<{ success: boolean; message: string }>('/admin/dormitory/save-allocations', {
+      method: 'POST',
+      body: JSON.stringify({ allocations, term }),
+    }),
+
   overrideDormitory: (studentId: string, targetRoomId: string, term?: string) =>
     request<{ success: boolean; allocation: any }>('/admin/dormitory/override', {
       method: 'PUT',
@@ -196,6 +208,18 @@ export const api = {
     request<{ success: boolean; message: string }>('/admin/refectory/generate', {
       method: 'POST',
       body: JSON.stringify({ term }),
+    }),
+
+  swapRefectory: (data: { studentAId: string; studentBId: string; tableAId: string; tableBId: string; seatA?: number; seatB?: number; term?: string }) =>
+    request<{ success: boolean; message: string }>('/admin/refectory/swap', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  saveRefectoryAllocations: (allocations: { tableId: string; studentIds: string[] }[], term?: string) =>
+    request<{ success: boolean; message: string }>('/admin/refectory/save-allocations', {
+      method: 'POST',
+      body: JSON.stringify({ allocations, term }),
     }),
 
   getDuties: (date?: string, dutyType?: string) => {
